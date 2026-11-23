@@ -5,20 +5,27 @@ on:
   workflow_dispatch:
     inputs:
       urls:
-        description: Links to try, separated by spaces
-        required: true
+        description: Links to try, separated by spaces (leave empty to only check the live app)
+        required: false
+        default: ''
 
 jobs:
   try:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Live app settings
+        run: |
+          APP=$(grep -m1 '^app' fly.toml | cut -d'"' -f2)
+          curl -fsS "https://$APP.fly.dev/api/config"; echo
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+        if: inputs.urls != ''
       - name: Import
+        if: inputs.urls != ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           URLS: ${{ inputs.urls }}

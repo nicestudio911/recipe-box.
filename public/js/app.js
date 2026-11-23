@@ -10,6 +10,8 @@ let listQuery = '';
 let listTag = '';
 let user = null;         // logged-in account
 let pendingSharedUrl = null;
+let emailEnabled = false;  // server has an email service for verification / reset
+let verifyBannerClosed = false;
 
 // ---------- helpers ----------
 function toast(msg, ms = 2600) {
@@ -77,6 +79,10 @@ async function renderList() {
     (!q || [r.title, ...(r.ingredients || []), ...(r.tags || [])].join(' ').toLowerCase().includes(q)));
 
   view.innerHTML = `
+    ${emailEnabled && !user.emailVerified && !verifyBannerClosed ? `<div class="banner">
+      <span>📧 Please confirm your email. We sent a link to <b>${esc(user.email)}</b>.</span>
+      <span class="banner-actions"><button class="link" data-act="resend">Send again</button><button class="link" data-act="close-banner" aria-label="Hide">✕</button></span>
+    </div>` : ''}
     <div class="search"><input id="q" type="search" placeholder="Search recipes or ingredients" value="${esc(listQuery)}" aria-label="Search"></div>
     ${recipes.length ? `<div class="chips">
       <button class="chip ${!listTag ? 'on' : ''}" data-tag="">All</button>
@@ -92,6 +98,11 @@ async function renderList() {
       </div>` :
       shown.length ? `<div class="grid">${shown.map(card).join('')}</div>` : `<p class="muted center">Nothing matches “${esc(listQuery)}”.</p>`}`;
 
+  const resend = $('[data-act=resend]');
+  if (resend) {
+    resend.onclick = () => resendVerification(resend);
+    $('[data-act=close-banner]').onclick = () => { verifyBannerClosed = true; $('.banner').remove(); };
+  }
   const qi = $('#q');
   qi.oninput = () => { listQuery = qi.value; renderList().then(() => { const n = $('#q'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }); };
   view.querySelectorAll('.chip').forEach(c => (c.onclick = () => { listTag = c.dataset.tag; renderList(); }));
@@ -278,7 +289,17 @@ function renderSettings() {
     <div class="settings">
       <h1>Account</h1>
       <p class="muted">Logged in as <b>${esc(user.email)}</b>. Your recipes are saved to your account, so they appear on every phone and computer where you log in.</p>
+      ${emailEnabled ? `<p class="small">${user.emailVerified ? '✅ Email confirmed' : '⚠️ Email not confirmed yet. <button class="link" data-act="resend">Send the link again</button>'}</p>` : ''}
       <div class="actions"><button class="btn" data-act="logout">Log out</button></div>
+
+      <h2>Change password</h2>
+      <form class="stack pw-form" autocomplete="on">
+        <input type="email" name="username" value="${esc(user.email)}" autocomplete="username" hidden>
+        <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
+        <label>New password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+        <p class="error" hidden></p>
+        <button class="btn">Change password</button>
+      </form>
 
       <h2>Backup</h2>
       <p class="muted">Download all your recipes as a file, or add recipes from a backup file.</p>
@@ -294,6 +315,19 @@ function renderSettings() {
       <p class="muted">Permanently deletes your account and all your recipes. Download a backup first if you want to keep them.</p>
       <div class="actions"><button class="btn danger" data-act="delete">Delete my account</button></div>
     </div>`;
+  const resendBtn = $('[data-act=resend]');
+  if (resendBtn) resendBtn.onclick = () => resendVerification(resendBtn);
+  const pw = $('.pw-form');
+  pw.onsubmit = async e => {
+    e.preventDefault();
+    const btn = pw.querySelector('button'); const err = pw.querySelector('.error');
+    btn.disabled = true; err.hidden = true;
+    try {
+      await api('/api/password', { method: 'POST', body: { current: pw.current.value, password: pw.password.value } });
+      pw.reset(); toast('Password changed. Other devices were logged out.', 4000);
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; }
+    btn.disabled = false;
+  };
   $('[data-act=logout]').onclick = async () => {
     try { await logOut(); user = null; location.hash = '#/'; route(); } catch (e) { toast(e.message); }
   };
@@ -338,11 +372,14 @@ function renderAuth(mode = 'login') {
         <label>Password<input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="${signup ? 'At least 8 characters' : ''}"></label>
         <p class="error" hidden></p>
         <button class="btn primary">${signup ? 'Create account' : 'Log in'}</button>
+        ${!signup && emailEnabled ? '<a href="#" class="center small" data-forgot>Forgot your password?</a>' : ''}
       </form>
       <p class="center muted">${signup ? 'Already have an account?' : 'New here?'}
         <a href="#" data-switch>${signup ? 'Log in' : 'Create an account'}</a></p>
     </div>`;
   $('[data-switch]').onclick = e => { e.preventDefault(); renderAuth(signup ? 'login' : 'signup'); };
+  const forgot = $('[data-forgot]');
+  if (forgot) forgot.onclick = e => { e.preventDefault(); renderForgot($('.auth [name=email]').value); };
   const form = $('.auth form');
   form.onsubmit = async e => {
     e.preventDefault();
@@ -357,6 +394,72 @@ function renderAuth(mode = 'login') {
       if (pendingSharedUrl) { openUrlSheet(pendingSharedUrl); pendingSharedUrl = null; }
     } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
   };
+}
+
+async function resendVerification(btn) {
+  btn.disabled = true;
+  try { await api('/api/verify/send', { method: 'POST', body: {} }); toast(`Sent. Check your inbox at ${user.email}`, 4000); }
+  catch (e) { toast(e.message, 4000); btn.disabled = false; }
+}
+
+function authShell(title, text, inner) {
+  $('#fab').hidden = true; $('#back').hidden = true;
+  view.innerHTML = `<div class="auth"><div class="auth-hero"><div class="empty-icon">🍲</div><h1>${title}</h1>${text ? `<p class="muted">${text}</p>` : ''}</div>${inner}</div>`;
+}
+
+function renderForgot(email = '') {
+  authShell('Forgot your password?', 'Enter your email and we will send you a link to choose a new password.', `
+    <form class="stack">
+      <label>Email<input name="email" type="email" required autocomplete="email" inputmode="email" value="${esc(email)}"></label>
+      <p class="error" hidden></p>
+      <button class="btn primary">Send reset link</button>
+    </form>
+    <p class="center muted"><a href="#" data-back>Back to log in</a></p>`);
+  $('[data-back]').onclick = e => { e.preventDefault(); renderAuth(); };
+  const form = $('.auth form');
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const btn = form.querySelector('button'); const err = form.querySelector('.error');
+    btn.disabled = true; err.hidden = true;
+    try {
+      await api('/api/forgot', { method: 'POST', body: { email: form.email.value } });
+      authShell('Check your email', `If there is an account for <b>${esc(form.email.value)}</b>, we just sent it a link to choose a new password. The link works for 1 hour. Check your spam folder too.`,
+        '<p class="center"><a href="#" data-back>Back to log in</a></p>');
+      $('[data-back]').onclick = ev => { ev.preventDefault(); renderAuth(); };
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+  };
+}
+
+function renderReset(token) {
+  authShell('Choose a new password', '', `
+    <form class="stack">
+      <label>New password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <p class="error" hidden></p>
+      <button class="btn primary">Save new password</button>
+    </form>`);
+  const form = $('.auth form');
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const btn = form.querySelector('button'); const err = form.querySelector('.error');
+    btn.disabled = true; err.hidden = true;
+    try {
+      ({ user } = await api('/api/reset', { method: 'POST', body: { token, password: form.password.value } }));
+      $('#settings-link').hidden = false;
+      toast('Password changed. You are logged in.', 4000);
+      location.replace('#/');
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+  };
+}
+
+async function renderVerify(token) {
+  authShell('Confirming your email…', '', '');
+  try {
+    const res = await api('/api/verify', { method: 'POST', body: { token } });
+    if (user && user.id === res.user.id) user = res.user;
+    authShell('Email confirmed ✅', 'Thanks! Your email address is confirmed.', `<p class="center"><a class="btn primary" href="#/">${user ? 'Go to my recipes' : 'Log in'}</a></p>`);
+  } catch (e) {
+    authShell('Link not valid', esc(e.message), `<p class="center"><a class="btn" href="#/">Open Recipe Box</a></p>`);
+  }
 }
 
 // Recipes saved on this device before accounts existed: move them into the account
@@ -505,6 +608,8 @@ async function route() {
   $('#fab').hidden = !!page;
   $('#back').hidden = !page;
   window.scrollTo(0, 0);
+  if (page === 'verify') return renderVerify(id);
+  if (page === 'reset') return renderReset(id);
   if (!user) return renderAuth();
   if (!page) return renderList();
   if (page === 'recipe') return renderRecipe(id);
@@ -527,6 +632,7 @@ if (sharedUrl) history.replaceState(null, '', '/#/');
 
 (async () => {
   try { user = await currentUser(); } catch { user = null; }
+  try { emailEnabled = (await api('/api/config')).emailEnabled; } catch { /* offline */ }
   $('#settings-link').hidden = !user;
   await route();
   if (sharedUrl) { if (user) openUrlSheet(sharedUrl); else pendingSharedUrl = sharedUrl; }

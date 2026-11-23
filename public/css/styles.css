@@ -136,3 +136,10 @@ body.cooking .recipe .hero, body.cooking #fab { display: none; }
 .auth-hero { text-align: center; margin-bottom: 20px; }
 .auth label { display: block; font-weight: 600; font-size: .92rem; }
 .settings h2 { margin-top: 2rem; }
+
+.banner { display: flex; gap: 10px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-radius: 12px;
+  padding: 10px 14px; margin-bottom: 12px; font-size: .92rem; }
+.banner-actions { display: flex; gap: 8px; flex: none; }
+button.link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.pw-form { max-width: 420px; }
+.pw-form label, .auth label { display: block; font-weight: 600; font-size: .92rem; }

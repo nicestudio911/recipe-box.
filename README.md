@@ -8,7 +8,8 @@ A recipe app for phone and web, from one codebase (an installable web app).
 - **Paste text**: paste a recipe from a message or document.
 - Search, tags, favourites, ½×/2×/3× quantity scaling, tick off ingredients and steps, cooking mode (bigger text, screen stays on), share, backup and restore.
 - **Accounts**: anyone can sign up with email and password. Each person's recipes are stored on the server and show up on every device they log in on. A copy stays on the device so recipes still open offline. Recipes saved by version 1 (device only) are offered for upload at first login.
-- Account settings: log out, download/restore a backup, delete account (removes all their data).
+- Account settings: change password (logs out other devices), email confirmation status, log out, download/restore a backup, delete account (removes all their data).
+- Forgot password (reset link by email, 1 hour) and email verification after sign-up, when an email service is configured.
 
 ## Run it
 
@@ -27,6 +28,8 @@ npm test           # parser and API tests
 | `PORT` | `3000` | Port to listen on |
 | `DATA_DIR` | `./data` | Folder for the SQLite database (`recipes.db`). Put it on a persistent disk and back it up. |
 | `TRUST_PROXY` | off | Set to `1` behind a host's https proxy (Fly.io, Render, Railway, nginx) so secure cookies and rate limits use the real client address |
+| `APP_URL` | request host | Public address used in email links, e.g. `https://recipe-box-ivan.fly.dev` |
+| `BREVO_API_KEY` or `RESEND_API_KEY`, plus `MAIL_FROM` | off | Email service for verification and password reset (see DEPLOY.md). Without them those features are hidden. |
 | `ALLOW_LOCAL_URLS` | off | Testing only: lets link import open private network addresses |
 
 ### Deploy
@@ -46,7 +49,9 @@ Then open the address on a phone and choose "Add to Home Screen" (iPhone) or "In
 
 Passwords are hashed with scrypt; sessions are random tokens in HttpOnly, SameSite cookies (Secure on https), stored hashed. Writes must be same-origin JSON (CSRF protection). Sign-up/log-in, saves and link imports are rate limited, link import requires login and refuses private network addresses, recipe fields are size-limited, and pages are served with a strict Content-Security-Policy.
 
-Not yet included: password reset by email (needs an email provider), email verification, and a privacy policy / terms page, which a public app should have before launch.
+Email links are one-time tokens stored hashed (verification 7 days, reset 1 hour); a reset ends all sessions. "Forgot password" gives the same answer whether or not the email has an account.
+
+Not yet included: a privacy policy / terms page, which a public app should have before launch.
 
 ## How it fits together
 

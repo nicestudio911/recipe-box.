@@ -40,6 +40,22 @@ On your phone, open the address and choose **Add to Home Screen** (iPhone) or
 - **Your own domain** (e.g. recipes.example.com): dashboard → your app →
   Certificates, then follow the DNS instructions.
 
+## Turn on emails (verification and password reset)
+
+Change password works without this. Email verification and "Forgot password?"
+stay hidden in the app until an email service is connected. The easiest is Brevo
+(free: 300 emails a day, no own domain needed):
+
+1. Sign up at https://www.brevo.com.
+2. **Senders & IP → Senders**: add and confirm the address emails should come from.
+3. **SMTP & API → API keys**: create a key and copy it.
+4. In the Fly.io dashboard open your app → **Secrets**, and add:
+   - `BREVO_API_KEY` = the key
+   - `MAIL_FROM` = `Recipe Box <the address from step 2>`
+
+Fly.io restarts the app with the new secrets, and the email features appear.
+(Resend works too: set `RESEND_API_KEY` instead. It needs your own domain.)
+
 ## Deploying by hand (optional)
 
 With the Fly.io command line tool installed (https://fly.io/docs/flyctl/install/):

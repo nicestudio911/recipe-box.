@@ -8,6 +8,7 @@ primary_region = "fra"   # Frankfurt, close to Bulgaria
   DATA_DIR = "/data"
   TRUST_PROXY = "1"
   PORT = "3000"
+  APP_URL = "https://recipe-box-ivan.fly.dev"   # used in email links
 
 [[mounts]]
   source = "recipe_data"

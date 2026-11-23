@@ -38,7 +38,7 @@ docker build -t recipe-box .
 docker run -p 3000:3000 -v recipe-data:/data recipe-box
 ```
 
-This Dockerfile works as-is on Fly.io (with a volume mounted at `/data`), Render (with a disk at `/data`), Railway (with a volume) or any VPS. The host must give it an https address: phone camera capture, installing to the home screen and secure login cookies all need https.
+For Fly.io, follow [DEPLOY.md](DEPLOY.md) (`fly.toml` is included). The Dockerfile also works on Render (with a disk at `/data`), Railway (with a volume) or any VPS. The host must give it an https address: phone camera capture, installing to the home screen and secure login cookies all need https.
 
 Then open the address on a phone and choose "Add to Home Screen" (iPhone) or "Install app" (Android).
 

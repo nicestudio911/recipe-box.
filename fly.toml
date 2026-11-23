@@ -1,5 +1,5 @@
-# Fly.io settings for Recipe Box. "fly launch" will ask for a unique app name.
-app = "recipe-box"
+# Fly.io settings for Recipe Box. Deployed automatically by .github/workflows/deploy.yml.
+app = "recipe-box-ivan"   # must be unique on Fly.io; becomes recipe-box-ivan.fly.dev
 primary_region = "fra"   # Frankfurt, close to Bulgaria
 
 [build]

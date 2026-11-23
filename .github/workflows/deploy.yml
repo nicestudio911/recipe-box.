@@ -1,0 +1,48 @@
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  deploy:
+    # Only changes that land on main go live, and only after the tests pass
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Check the Fly.io token is set
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::Add a repository secret named FLY_API_TOKEN (see DEPLOY.md)"; exit 1
+          fi
+      - name: Create the Fly.io app on the first run
+        run: |
+          APP=$(grep -m1 '^app' fly.toml | cut -d'"' -f2)
+          if ! flyctl status --app "$APP" > /dev/null 2>&1; then
+            flyctl apps create "$APP" --org personal
+          fi
+      - name: Deploy
+        # One machine only: the database lives on that machine's disk
+        run: flyctl deploy --remote-only --ha=false

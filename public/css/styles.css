@@ -131,3 +131,8 @@ body.cooking .recipe .hero, body.cooking #fab { display: none; }
 .settings p { max-width: 560px; }
 @keyframes up { from { transform: translateY(100%); } }
 @keyframes fade { from { opacity: 0; } }
+
+.auth { max-width: 420px; margin: 24px auto 0; }
+.auth-hero { text-align: center; margin-bottom: 20px; }
+.auth label { display: block; font-weight: 600; font-size: .92rem; }
+.settings h2 { margin-top: 2rem; }

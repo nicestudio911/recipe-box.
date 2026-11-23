@@ -1,4 +1,4 @@
-import { allRecipes, getRecipe, saveRecipe, deleteRecipe, importAll } from './db.js';
+import { allRecipes, getRecipe, saveRecipe, deleteRecipe, importAll, api, currentUser, signUp, logIn, logOut, deleteAccount, legacyRecipes, moveLegacyRecipes } from './db.js';
 import { parseRecipeText } from './parse-text.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -8,6 +8,8 @@ const lines = s => String(s || '').split('\n').map(l => l.trim()).filter(Boolean
 let draft = null;        // recipe being created from an import, before it's saved
 let listQuery = '';
 let listTag = '';
+let user = null;         // logged-in account
+let pendingSharedUrl = null;
 
 // ---------- helpers ----------
 function toast(msg, ms = 2600) {
@@ -101,7 +103,7 @@ function card(r) {
     <div class="thumb">${r.image ? `<img src="${esc(r.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span>🍽️</span>'}</div>
     <div class="card-body">
       <h3>${r.favorite ? '<span class="star">★</span> ' : ''}${esc(r.title)}</h3>
-      <p class="muted small">${[(r.ingredients || []).length + ' ingredients', fmtMins(time)].filter(Boolean).join(' · ')}</p>
+      <p class="muted small">${[((n => n + (n === 1 ? ' ingredient' : ' ingredients'))((r.ingredients || []).length)), fmtMins(time)].filter(Boolean).join(' · ')}</p>
     </div></a>`;
 }
 
@@ -158,10 +160,12 @@ async function renderRecipe(id) {
 
     view.querySelectorAll('[data-scale]').forEach(b => (b.onclick = () => { factor = +b.dataset.scale; draw(); }));
     view.querySelectorAll('.steps li:not(.sub)').forEach(li => (li.onclick = () => li.classList.toggle('done')));
-    $('[data-action=fav]').onclick = async () => { r.favorite = !r.favorite; Object.assign(r, await saveRecipe(r)); draw(); };
+    $('[data-action=fav]').onclick = async () => {
+      try { Object.assign(r, await saveRecipe({ ...r, favorite: !r.favorite })); draw(); } catch (e) { toast(e.message); }
+    };
     $('[data-action=delete]').onclick = async () => {
       if (!confirm(`Delete “${r.title}”?`)) return;
-      await deleteRecipe(r.id); toast('Recipe deleted'); location.hash = '#/';
+      try { await deleteRecipe(r.id); toast('Recipe deleted'); location.hash = '#/'; } catch (e) { toast(e.message); }
     };
     $('[data-action=share]').onclick = () => shareRecipe(r);
     $('[data-action=cook]').onclick = e => toggleCooking(e.currentTarget);
@@ -246,14 +250,23 @@ async function renderEdit(id) {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(form));
     const num = v => (v === '' ? null : Math.max(0, parseInt(v, 10)) || null);
-    const saved = await saveRecipe({
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    let saved;
+    try {
+      saved = await saveRecipe({
       ...(existing || {}),
       title: d.title.trim(), description: d.description.trim(), image,
       servings: d.servings.trim(), prepTime: num(d.prepTime), cookTime: num(d.cookTime), totalTime: num(d.totalTime),
       ingredients: lines(d.ingredients), steps: lines(d.steps),
       tags: d.tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
       notes: d.notes.trim(), sourceUrl: d.sourceUrl.trim(),
-    });
+      });
+    } catch (ex) {
+      btn.disabled = false; btn.textContent = 'Save recipe';
+      toast(ex.message, 4000);
+      return;
+    }
     draft = null;
     toast('Saved');
     location.replace(`#/recipe/${saved.id}`);
@@ -263,17 +276,33 @@ async function renderEdit(id) {
 function renderSettings() {
   view.innerHTML = `
     <div class="settings">
-      <h1>Backup</h1>
-      <p class="muted">Your recipes are saved on this device only. Download a backup file to keep them safe or to move them to another phone or computer.</p>
+      <h1>Account</h1>
+      <p class="muted">Logged in as <b>${esc(user.email)}</b>. Your recipes are saved to your account, so they appear on every phone and computer where you log in.</p>
+      <div class="actions"><button class="btn" data-act="logout">Log out</button></div>
+
+      <h2>Backup</h2>
+      <p class="muted">Download all your recipes as a file, or add recipes from a backup file.</p>
       <div class="actions">
-        <button class="btn primary" data-act="export">Download backup</button>
+        <button class="btn" data-act="export">Download backup</button>
         <button class="btn" data-act="import">Restore from backup</button>
       </div>
+
       <h2>Install on your phone</h2>
-      <p class="muted">Open this page in your phone's browser. On iPhone tap Share, then “Add to Home Screen”. On Android tap the menu, then “Install app”. It then opens like a normal app and works offline.</p>
+      <p class="muted">Open this page in your phone's browser. On iPhone tap Share, then “Add to Home Screen”. On Android tap the menu, then “Install app”. It then opens like a normal app.</p>
+
+      <h2>Delete account</h2>
+      <p class="muted">Permanently deletes your account and all your recipes. Download a backup first if you want to keep them.</p>
+      <div class="actions"><button class="btn danger" data-act="delete">Delete my account</button></div>
     </div>`;
+  $('[data-act=logout]').onclick = async () => {
+    try { await logOut(); user = null; location.hash = '#/'; route(); } catch (e) { toast(e.message); }
+  };
+  $('[data-act=delete]').onclick = async () => {
+    if (prompt(`This deletes your account and all your recipes forever. Type DELETE to confirm.`) !== 'DELETE') return;
+    try { await deleteAccount(); user = null; toast('Your account was deleted'); location.hash = '#/'; route(); } catch (e) { toast(e.message); }
+  };
   $('[data-act=export]').onclick = async () => {
-    const data = JSON.stringify({ app: 'recipe-box', version: 1, exportedAt: new Date().toISOString(), recipes: await allRecipes() });
+    const data = JSON.stringify({ app: 'recipe-box', version: 2, exportedAt: new Date().toISOString(), recipes: await allRecipes() });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
     a.download = `recipes-${new Date().toISOString().slice(0, 10)}.json`;
@@ -283,14 +312,60 @@ function renderSettings() {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = 'application/json,.json';
     input.onchange = async () => {
-      try {
-        const data = JSON.parse(await input.files[0].text());
-        const n = await importAll(Array.isArray(data) ? data : data.recipes);
-        toast(`Restored ${n} recipes`);
-      } catch { toast('That file is not a recipe backup'); }
+      let list;
+      try { const data = JSON.parse(await input.files[0].text()); list = Array.isArray(data) ? data : data.recipes; if (!Array.isArray(list)) throw 0; }
+      catch { toast('That file is not a recipe backup'); return; }
+      try { const n = await importAll(list, k => toast(`Restoring… ${k} of ${list.length}`)); toast(`Restored ${n} recipes`); }
+      catch (e) { toast(e.message, 4000); }
     };
     input.click();
   };
+}
+
+function renderAuth(mode = 'login') {
+  const signup = mode === 'signup';
+  $('#fab').hidden = true; $('#back').hidden = true; $('#settings-link').hidden = true;
+  view.innerHTML = `
+    <div class="auth">
+      <div class="auth-hero">
+        <div class="empty-icon">🍲</div>
+        <h1>${signup ? 'Create your recipe box' : 'Welcome back'}</h1>
+        <p class="muted">Save your recipes, snap them from a cookbook with your camera, or import them from any recipe website. They follow you to every device.</p>
+      </div>
+      <form class="stack" autocomplete="on">
+        ${signup ? '<label>Your name<input name="name" autocomplete="name" placeholder="Optional"></label>' : ''}
+        <label>Email<input name="email" type="email" required autocomplete="email" inputmode="email"></label>
+        <label>Password<input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="${signup ? 'At least 8 characters' : ''}"></label>
+        <p class="error" hidden></p>
+        <button class="btn primary">${signup ? 'Create account' : 'Log in'}</button>
+      </form>
+      <p class="center muted">${signup ? 'Already have an account?' : 'New here?'}
+        <a href="#" data-switch>${signup ? 'Log in' : 'Create an account'}</a></p>
+    </div>`;
+  $('[data-switch]').onclick = e => { e.preventDefault(); renderAuth(signup ? 'login' : 'signup'); };
+  const form = $('.auth form');
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const btn = form.querySelector('button'); const err = form.querySelector('.error');
+    btn.disabled = true; err.hidden = true;
+    const body = Object.fromEntries(new FormData(form));
+    try {
+      user = await (signup ? signUp(body) : logIn(body));
+      $('#settings-link').hidden = false;
+      await offerLegacyMove();
+      route();
+      if (pendingSharedUrl) { openUrlSheet(pendingSharedUrl); pendingSharedUrl = null; }
+    } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
+  };
+}
+
+// Recipes saved on this device before accounts existed: move them into the account
+async function offerLegacyMove() {
+  let list = [];
+  try { list = await legacyRecipes(); } catch { return; }
+  if (!list.length) return;
+  if (!confirm(`This device has ${list.length} recipe${list.length > 1 ? 's' : ''} saved from before you had an account. Add ${list.length > 1 ? 'them' : 'it'} to your account?`)) return;
+  try { toast(`Added ${await moveLegacyRecipes()} recipes to your account`); } catch (e) { toast(e.message, 4000); }
 }
 
 // ---------- add / import ----------
@@ -336,13 +411,11 @@ function openUrlSheet(prefill = '') {
       const btn = form.querySelector('button'); const err = form.querySelector('.error');
       btn.disabled = true; btn.textContent = 'Reading the page…'; err.hidden = true;
       try {
-        const res = await fetch(`/api/import?url=${encodeURIComponent(form.url.value.trim())}`);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Import failed');
+        const data = await api(`/api/import?url=${encodeURIComponent(form.url.value.trim())}`);
         draft = { ...data, _from: 'url' };
         close(); location.hash = '#/new';
       } catch (ex) {
-        err.textContent = navigator.onLine ? ex.message : 'You are offline. Connect to the internet to import from a link.';
+        err.textContent = ex.message;
         err.hidden = false; btn.disabled = false; btn.textContent = 'Import';
       }
     };
@@ -432,6 +505,7 @@ async function route() {
   $('#fab').hidden = !!page;
   $('#back').hidden = !page;
   window.scrollTo(0, 0);
+  if (!user) return renderAuth();
   if (!page) return renderList();
   if (page === 'recipe') return renderRecipe(id);
   if (page === 'edit') return renderEdit(id);
@@ -445,11 +519,17 @@ document.addEventListener('click', e => {
 });
 $('#back').onclick = () => (history.length > 1 ? history.back() : (location.hash = '#/'));
 window.addEventListener('hashchange', route);
-route();
 
 // Share target: Android "Share → Recipe Box" with a link
 const shared = new URLSearchParams(location.search);
 const sharedUrl = shared.get('url') || (shared.get('text') || '').match(/https?:\/\/\S+/)?.[0];
-if (sharedUrl) { history.replaceState(null, '', '/#/'); openUrlSheet(sharedUrl); }
+if (sharedUrl) history.replaceState(null, '', '/#/');
+
+(async () => {
+  try { user = await currentUser(); } catch { user = null; }
+  $('#settings-link').hidden = !user;
+  await route();
+  if (sharedUrl) { if (user) openUrlSheet(sharedUrl); else pendingSharedUrl = sharedUrl; }
+})();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});

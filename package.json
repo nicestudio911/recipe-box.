@@ -1,14 +1,14 @@
 {
   "name": "recipe-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Recipe book for phone and web: create, save, import from photo or URL",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test test/*.test.js"
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.5"
   },
   "license": "MIT",
   "dependencies": {

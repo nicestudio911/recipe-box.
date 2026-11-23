@@ -56,6 +56,17 @@ stay hidden in the app until an email service is connected. The easiest is Brevo
 Fly.io restarts the app with the new secrets, and the email features appear.
 (Resend works too: set `RESEND_API_KEY` instead. It needs your own domain.)
 
+## Turn on AI for social media imports
+
+1. Create an account at https://console.anthropic.com, add a payment method, and
+   create an API key (**API keys → Create key**).
+2. Fly.io dashboard → your app → **Secrets** → add `ANTHROPIC_API_KEY` = the key.
+3. Optional, to test imports from GitHub: add the same key as a repository secret
+   `ANTHROPIC_API_KEY`, then run **Actions → Try link imports** with some links.
+
+Each social media import then costs roughly 2–4 US cents. Without the key, social
+imports still work for captions that are written as a clear list.
+
 ## Deploying by hand (optional)
 
 With the Fly.io command line tool installed (https://fly.io/docs/flyctl/install/):

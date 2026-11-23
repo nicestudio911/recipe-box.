@@ -1,0 +1,25 @@
+name: Try link imports
+
+# Manually run from the Actions tab to check imports against real sites.
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: Links to try, separated by spaces
+        required: true
+
+jobs:
+  try:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Import
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          URLS: ${{ inputs.urls }}
+        run: node --disable-warning=ExperimentalWarning scripts/try-import.mjs $URLS

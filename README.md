@@ -5,6 +5,7 @@ A recipe app for phone and web, from one codebase (an installable web app).
 - **Create and save recipes**: title, photo, servings, times, ingredients, steps, tags, notes.
 - **Import from a photo**: take a picture with the camera or upload one or more photos of a cookbook page or a handwritten card. Text recognition runs on the device (English and Bulgarian), then the text is split into title, ingredients and steps for you to check.
 - **Import from a link**: paste a recipe page address. Works with most recipe sites (schema.org data), with a fallback for simpler pages. On Android you can also use Share → Recipe Box from the browser once installed.
+- **Social media posts**: YouTube (videos and Shorts), TikTok, Instagram and Facebook links. The recipe is read from the caption or video description; with AI turned on (`ANTHROPIC_API_KEY`), free-form captions are structured by Claude and YouTube subtitles are used for recipes that are only spoken. Instagram and Facebook often share only part of a caption, or nothing for private posts; the app says so and offers "Paste text".
 - **Paste text**: paste a recipe from a message or document.
 - Search, tags, favourites, ½×/2×/3× quantity scaling, tick off ingredients and steps, cooking mode (bigger text, screen stays on), share, backup and restore.
 - **Accounts**: anyone can sign up with email and password. Each person's recipes are stored on the server and show up on every device they log in on. A copy stays on the device so recipes still open offline. Recipes saved by version 1 (device only) are offered for upload at first login.
@@ -30,6 +31,7 @@ npm test           # parser and API tests
 | `TRUST_PROXY` | off | Set to `1` behind a host's https proxy (Fly.io, Render, Railway, nginx) so secure cookies and rate limits use the real client address |
 | `APP_URL` | request host | Public address used in email links, e.g. `https://recipe-box-ivan.fly.dev` |
 | `BREVO_API_KEY` or `RESEND_API_KEY`, plus `MAIL_FROM` | off | Email service for verification and password reset (see DEPLOY.md). Without them those features are hidden. |
+| `ANTHROPIC_API_KEY` | off | Turns on AI reading of social media captions and video subtitles (Claude). `ANTHROPIC_MODEL` overrides the model (default `claude-opus-5-5`). Social imports are limited to 40 per user per day. |
 | `ALLOW_LOCAL_URLS` | off | Testing only: lets link import open private network addresses |
 
 ### Deploy

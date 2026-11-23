@@ -72,3 +72,19 @@ test('Heuristic extraction without schema', () => {
 });
 
 test('durations', () => { assert.equal(durationToMinutes('PT45M'), 45); assert.equal(durationToMinutes('P0DT2H'), 120); });
+
+test('Social caption with emoji bullets, keycaps and hashtags', () => {
+  const r = parseRecipeText(`Easy garlic pasta 🍝
+🛒 Ingredients:
+🍝 200 g spaghetti
+🧄 3 cloves garlic
+🫒 4 tbsp olive oil
+👩‍🍳 Method:
+1️⃣ Cook the pasta in salted water.
+2️⃣ Fry the garlic in the oil until golden.
+3️⃣ Mix everything together.
+#pasta #recipe #easyrecipes`);
+  assert.equal(r.title, 'Easy garlic pasta 🍝');
+  assert.deepEqual(r.ingredients, ['200 g spaghetti', '3 cloves garlic', '4 tbsp olive oil']);
+  assert.deepEqual(r.steps, ['Cook the pasta in salted water.', 'Fry the garlic in the oil until golden.', 'Mix everything together.']);
+});

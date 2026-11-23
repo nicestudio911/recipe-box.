@@ -10,7 +10,8 @@ let listQuery = '';
 let listTag = '';
 let user = null;         // logged-in account
 let pendingSharedUrl = null;
-let emailEnabled = false;  // server has an email service for verification / reset
+let emailEnabled = false;
+let aiEnabled = false;  // server has an email service for verification / reset
 let verifyBannerClosed = false;
 
 // ---------- helpers ----------
@@ -210,6 +211,7 @@ async function renderEdit(id) {
     <form class="edit" autocomplete="off">
       <h1>${existing ? 'Edit recipe' : isImport ? 'Check the imported recipe' : 'New recipe'}</h1>
       ${isImport ? `<p class="hint">${draft._from === 'photo' ? 'Text recognition is not perfect. Check the lines below and fix anything it misread, then save.' : 'Here is what we found. Make any changes, then save.'}</p>` : ''}
+      ${isImport && draft._warning ? `<p class="hint warn">⚠️ ${esc(draft._warning)}</p>` : ''}
 
       <div class="photo-field">
         <div class="photo-prev">${r.image ? `<img src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : '<span>No photo</span>'}</div>
@@ -235,7 +237,7 @@ async function renderEdit(id) {
       <label>Tags <span class="muted small">comma separated</span><input name="tags" value="${esc((r.tags || []).join(', '))}" placeholder="dinner, vegetarian"></label>
       <label>Notes<textarea name="notes" rows="3">${esc(r.notes)}</textarea></label>
       <label>Source link<input name="sourceUrl" type="url" value="${esc(r.sourceUrl)}" placeholder="https://"></label>
-      ${r._rawText ? `<details class="raw"><summary>Recognised text from the photo</summary><pre>${esc(r._rawText)}</pre></details>` : ''}
+      ${r._rawText ? `<details class="raw"><summary>${draft?._from === 'photo' ? 'Recognised text from the photo' : 'Original text from the post'}</summary><pre>${esc(r._rawText)}</pre></details>` : ''}
 
       <div class="actions sticky">
         <button type="button" class="btn" data-act="cancel">Cancel</button>
@@ -488,7 +490,7 @@ function openAddSheet() {
     <div class="add-options">
       <button data-a="cam"><span>📷</span><b>Take a photo</b><small>Of a cookbook page or a handwritten card</small></button>
       <button data-a="upload"><span>🖼️</span><b>Upload photos</b><small>One or more pictures of a recipe</small></button>
-      <button data-a="url"><span>🔗</span><b>From a link</b><small>Paste the address of a recipe website</small></button>
+      <button data-a="url"><span>🔗</span><b>From a link</b><small>Recipe website, YouTube, TikTok, Instagram or Facebook</small></button>
       <button data-a="paste"><span>📋</span><b>Paste text</b><small>Copied from a message or a document</small></button>
       <button data-a="manual"><span>✍️</span><b>Write it myself</b><small>Start with an empty recipe</small></button>
     </div>`, (panel, close) => {
@@ -503,6 +505,7 @@ function openAddSheet() {
 function openUrlSheet(prefill = '') {
   openSheet(`
     <h2>Import from a link</h2>
+    <p class="muted small">Recipe websites, YouTube videos and Shorts, TikTok, Instagram and Facebook posts. From a post, we read the recipe from its caption${aiEnabled ? ' and, for YouTube, from what is said in the video' : ''}.</p>
     <form class="stack">
       <input name="url" type="url" required placeholder="https://www.example.com/recipe" value="${esc(prefill)}" autofocus>
       <p class="error" hidden></p>
@@ -512,7 +515,7 @@ function openUrlSheet(prefill = '') {
     form.onsubmit = async e => {
       e.preventDefault();
       const btn = form.querySelector('button'); const err = form.querySelector('.error');
-      btn.disabled = true; btn.textContent = 'Reading the page…'; err.hidden = true;
+      btn.disabled = true; btn.textContent = /youtu|tiktok|instagram|facebook|fb\.watch/i.test(form.url.value) ? 'Reading the post… (can take up to 30 seconds)' : 'Reading the page…'; err.hidden = true;
       try {
         const data = await api(`/api/import?url=${encodeURIComponent(form.url.value.trim())}`);
         draft = { ...data, _from: 'url' };
@@ -632,7 +635,7 @@ if (sharedUrl) history.replaceState(null, '', '/#/');
 
 (async () => {
   try { user = await currentUser(); } catch { user = null; }
-  try { emailEnabled = (await api('/api/config')).emailEnabled; } catch { /* offline */ }
+  try { ({ emailEnabled, aiEnabled } = await api('/api/config')); } catch { /* offline */ }
   $('#settings-link').hidden = !user;
   await route();
   if (sharedUrl) { if (user) openUrlSheet(sharedUrl); else pendingSharedUrl = sharedUrl; }

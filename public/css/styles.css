@@ -143,3 +143,5 @@ body.cooking .recipe .hero, body.cooking #fab { display: none; }
 button.link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
 .pw-form { max-width: 420px; }
 .pw-form label, .auth label { display: block; font-weight: 600; font-size: .92rem; }
+
+.hint.warn { background: color-mix(in srgb, #f0b429 22%, var(--bg)); }

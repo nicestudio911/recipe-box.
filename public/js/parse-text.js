@@ -11,8 +11,22 @@ const QTY_START = new RegExp(`^\\s*([•\\-–*·o]\\s*)?(\\d+([.,/]\\d+)?|[½¼
 const BULLET = /^\s*[•\-–*·]\s+/;
 const STEP_NUM = /^\s*(?:step\s*)?(\d{1,2})\s*[.)]\s+|^\s*(?:стъпка\s*)(\d{1,2})[.:]?\s*/i;
 
+const KEYCAP = /^\s*(\d)\uFE0F?\u20E3\s*/u;                      // 1️⃣ 2️⃣ ...
+const LEAD_EMOJI = /^\s*(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1F3FB}-\u{1F3FF}\uFE0F\u200D])+\s*/u;
+
+// Social media captions: emoji bullets, keycap numbers, hashtags
+function socialTidy(line) {
+  if (/^(\s*#[\p{L}\p{N}_]+)+\s*$/u.test(line)) return '';            // hashtag-only line
+  line = line.replace(KEYCAP, '$1. ');
+  if (LEAD_EMOJI.test(line)) {
+    const rest = line.replace(LEAD_EMOJI, '');
+    line = ING_HEAD.test(rest) || STEP_HEAD.test(rest) || !rest ? rest : `• ${rest}`;
+  }
+  return line.replace(/(\s#[\p{L}\p{N}_]+)+\s*$/u, '');                  // trailing hashtags
+}
+
 function tidy(line) {
-  return line.replace(/\s+/g, ' ').replace(/^[|_~]+|[|_~]+$/g, '').trim();
+  return socialTidy(line).replace(/\s+/g, ' ').replace(/^[|_~]+|[|_~]+$/g, '').trim();
 }
 
 export function looksLikeIngredient(line) {

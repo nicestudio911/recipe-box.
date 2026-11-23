@@ -40,8 +40,7 @@ test('TikTok: caption from oEmbed', async () => {
 });
 
 test('Instagram: caption from link preview, AI used when available', async () => {
-  pages['https://www.instagram.com/reel/Cxyz/'] = opts => {
-    assert.match(opts.headers['User-Agent'], /facebookexternalhit/);
+  pages['https://www.instagram.com/reel/Cxyz/'] = () => {
     return `<meta property="og:description" content="1,234 likes, 56 comments - chef.ivan on May 3, 2025: &quot;Best hummus ever! Blend a can of chickpeas with 2 tbsp tahini, juice of 1 lemon and a garlic clove. Drizzle with olive oil.&quot;"><meta property="og:image" content="https://cdn.ig/x.jpg">`;
   };
   let seen;

@@ -1,5 +1,7 @@
 // Recipes live on the server, per account. A copy is kept on the device (IndexedDB)
 // so your recipes still open when you're offline.
+import { t } from './i18n.js';
+
 const DB_NAME = 'recipe-box';
 const LEGACY = 'recipes'; // version 1 kept recipes only on the device
 const CACHE = 'cache';
@@ -42,10 +44,10 @@ export async function api(path, { method = 'GET', body } = {}) {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new ApiError('You are offline. Connect to the internet and try again.', 0);
+    throw new ApiError(t('You are offline. Connect to the internet and try again.'), 0);
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data.error || 'Something went wrong', res.status);
+  if (!res.ok) throw new ApiError(t(data.error || 'Something went wrong'), res.status);
   return data;
 }
 

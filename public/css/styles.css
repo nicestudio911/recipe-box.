@@ -145,3 +145,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); fon
 .pw-form label, .auth label { display: block; font-weight: 600; font-size: .92rem; }
 
 .hint.warn { background: color-mix(in srgb, #f0b429 22%, var(--bg)); }
+
+.lang-btn { font-size: .85rem; font-weight: 700; width: auto; padding: 0 10px; border-radius: 999px; }
+.lang-pick button { padding: 8px 16px; }
+.legal-links { margin-top: 24px; }

@@ -1,58 +1,16 @@
 import { allRecipes, getRecipe, saveRecipe, deleteRecipe, importAll, api, currentUser, signUp, logIn, logOut, deleteAccount, legacyRecipes, moveLegacyRecipes } from './db.js';
 import { parseRecipeText } from './parse-text.js';
+import { t, tn, lang, setLang } from './i18n.js';
+import { $, $$, view, esc, lines, toast, fmtMins, resizeImage, pickFiles, openSheet, download } from './ui.js';
 
-const $ = (sel, el = document) => el.querySelector(sel);
-const view = $('#view');
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const lines = s => String(s || '').split('\n').map(l => l.trim()).filter(Boolean);
 let draft = null;        // recipe being created from an import, before it's saved
 let listQuery = '';
 let listTag = '';
 let user = null;         // logged-in account
 let pendingSharedUrl = null;
-let emailEnabled = false;
-let aiEnabled = false;  // server has an email service for verification / reset
+let emailEnabled = false; // server has an email service for verification / reset
+let aiEnabled = false;    // server has AI for imports
 let verifyBannerClosed = false;
-
-// ---------- helpers ----------
-function toast(msg, ms = 2600) {
-  const t = $('#toast');
-  t.textContent = msg; t.hidden = false;
-  clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), ms);
-}
-
-function fmtMins(m) {
-  if (!m) return '';
-  const h = Math.floor(m / 60), r = m % 60;
-  return h ? `${h} h${r ? ` ${r} min` : ''}` : `${r} min`;
-}
-
-// Shrink photos before storing them, so the database stays small
-function resizeImage(file, max = 1400, quality = 0.82) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(img.src);
-      resolve(c.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => reject(new Error('Could not read that image'));
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-function pickFiles({ camera = false, multiple = false } = {}) {
-  return new Promise(resolve => {
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*'; input.multiple = multiple;
-    if (camera) input.capture = 'environment';
-    input.onchange = () => resolve([...input.files]);
-    input.click();
-  });
-}
 
 // Scale numbers at the start of an ingredient line ("1 1/2 cups" x2 -> "3 cups")
 const FRAC = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125 };
@@ -81,23 +39,23 @@ async function renderList() {
 
   view.innerHTML = `
     ${emailEnabled && !user.emailVerified && !verifyBannerClosed ? `<div class="banner">
-      <span>📧 Please confirm your email. We sent a link to <b>${esc(user.email)}</b>.</span>
-      <span class="banner-actions"><button class="link" data-act="resend">Send again</button><button class="link" data-act="close-banner" aria-label="Hide">✕</button></span>
+      <span>${t('📧 Please confirm your email. We sent a link to <b>{email}</b>.', { email: esc(user.email) })}</span>
+      <span class="banner-actions"><button class="link" data-act="resend">${t('Send again')}</button><button class="link" data-act="close-banner" aria-label="${t('Hide')}">✕</button></span>
     </div>` : ''}
-    <div class="search"><input id="q" type="search" placeholder="Search recipes or ingredients" value="${esc(listQuery)}" aria-label="Search"></div>
+    <div class="search"><input id="q" type="search" placeholder="${t('Search recipes or ingredients')}" value="${esc(listQuery)}" aria-label="${t('Search')}"></div>
     ${recipes.length ? `<div class="chips">
-      <button class="chip ${!listTag ? 'on' : ''}" data-tag="">All</button>
-      <button class="chip ${listTag === '★' ? 'on' : ''}" data-tag="★">★ Favourites</button>
+      <button class="chip ${!listTag ? 'on' : ''}" data-tag="">${t('All')}</button>
+      <button class="chip ${listTag === '★' ? 'on' : ''}" data-tag="★">${t('★ Favourites')}</button>
       ${tags.map(t => `<button class="chip ${listTag === t ? 'on' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
     </div>` : ''}
     ${!recipes.length ? `
       <div class="empty">
         <div class="empty-icon">🍲</div>
-        <h2>No recipes yet</h2>
-        <p>Add your first one. Write it yourself, snap a photo of a cookbook page, or paste a link.</p>
-        <button class="btn primary" data-action="add">Add a recipe</button>
+        <h2>${t('No recipes yet')}</h2>
+        <p>${t('Add your first one. Write it yourself, snap a photo of a cookbook page, or paste a link.')}</p>
+        <button class="btn primary" data-action="add">${t('Add a recipe')}</button>
       </div>` :
-      shown.length ? `<div class="grid">${shown.map(card).join('')}</div>` : `<p class="muted center">Nothing matches “${esc(listQuery)}”.</p>`}`;
+      shown.length ? `<div class="grid">${shown.map(card).join('')}</div>` : `<p class="muted center">${t('Nothing matches “{q}”.', { q: esc(listQuery) })}</p>`}`;
 
   const resend = $('[data-act=resend]');
   if (resend) {
@@ -115,7 +73,7 @@ function card(r) {
     <div class="thumb">${r.image ? `<img src="${esc(r.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span>🍽️</span>'}</div>
     <div class="card-body">
       <h3>${r.favorite ? '<span class="star">★</span> ' : ''}${esc(r.title)}</h3>
-      <p class="muted small">${[((n => n + (n === 1 ? ' ingredient' : ' ingredients'))((r.ingredients || []).length)), fmtMins(time)].filter(Boolean).join(' · ')}</p>
+      <p class="muted small">${[tn((r.ingredients || []).length, 'ingredient', 'ingredients'), fmtMins(time)].filter(Boolean).join(' · ')}</p>
     </div></a>`;
 }
 
@@ -132,21 +90,21 @@ async function renderRecipe(id) {
         ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : ''}
         <div class="recipe-head">
           <h1>${esc(r.title)}</h1>
-          <button class="icon-btn ${r.favorite ? 'fav' : ''}" data-action="fav" aria-label="Favourite">${r.favorite ? '★' : '☆'}</button>
+          <button class="icon-btn ${r.favorite ? 'fav' : ''}" data-action="fav" aria-label="${t('Favourite')}">${r.favorite ? '★' : '☆'}</button>
         </div>
         ${r.description ? `<p class="muted">${esc(r.description)}</p>` : ''}
         <div class="facts">
           ${r.servings ? `<span>🍽️ ${esc(r.servings)}${factor !== 1 && baseServings ? ` → ${Math.round(baseServings * factor * 10) / 10}` : ''}</span>` : ''}
-          ${r.prepTime ? `<span>Prep ${fmtMins(r.prepTime)}</span>` : ''}
-          ${r.cookTime ? `<span>Cook ${fmtMins(r.cookTime)}</span>` : ''}
+          ${r.prepTime ? `<span>${t('Prep {t}', { t: fmtMins(r.prepTime) })}</span>` : ''}
+          ${r.cookTime ? `<span>${t('Cook {t}', { t: fmtMins(r.cookTime) })}</span>` : ''}
           ${r.totalTime ? `<span>⏱ ${fmtMins(r.totalTime)}</span>` : ''}
         </div>
         ${(r.tags || []).length ? `<div class="chips static">${r.tags.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
 
         <section>
           <div class="section-head">
-            <h2>Ingredients</h2>
-            <div class="scaler" aria-label="Scale recipe">
+            <h2>${t('Ingredients')}</h2>
+            <div class="scaler" aria-label="${t('Scale recipe')}">
               ${[0.5, 1, 2, 3].map(f => `<button class="${f === factor ? 'on' : ''}" data-scale="${f}">${f === 0.5 ? '½' : f}×</button>`).join('')}
             </div>
           </div>
@@ -154,19 +112,19 @@ async function renderRecipe(id) {
             `<li><label><input type="checkbox" data-i="${i}"><span>${esc(l)}</span></label></li>`).join('')}</ul>
         </section>
 
-        <section>
-          <h2>Steps</h2>
-          <ol class="steps">${(r.steps || []).map(s => s.startsWith('## ') ? `<li class="sub">${esc(s.slice(3))}</li>` : `<li>${esc(s)}</li>`).join('')}</ol>
-        </section>
+        ${(r.steps || []).length ? `<section>
+          <h2>${t('Steps')}</h2>
+          <ol class="steps">${r.steps.map(s => s.startsWith('## ') ? `<li class="sub">${esc(s.slice(3))}</li>` : `<li>${esc(s)}</li>`).join('')}</ol>
+        </section>` : ''}
 
-        ${r.notes ? `<section><h2>Notes</h2><p class="notes">${esc(r.notes)}</p></section>` : ''}
-        ${r.sourceUrl ? `<p class="small muted">Source: <a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener">${esc(new URL(r.sourceUrl).hostname)}</a></p>` : ''}
+        ${r.notes ? `<section><h2>${t('Notes')}</h2><p class="notes">${esc(r.notes)}</p></section>` : ''}
+        ${r.sourceUrl ? `<p class="small muted">${t('Source:')} <a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener">${esc(new URL(r.sourceUrl).hostname)}</a></p>` : ''}
 
         <div class="actions">
-          <button class="btn" data-action="cook">👩‍🍳 Cooking mode</button>
-          <a class="btn" href="#/edit/${r.id}">Edit</a>
-          <button class="btn" data-action="share">Share</button>
-          <button class="btn danger" data-action="delete">Delete</button>
+          <button class="btn" data-action="cook">${t('👩‍🍳 Cooking mode')}</button>
+          <a class="btn" href="#/edit/${r.id}">${t('Edit')}</a>
+          <button class="btn" data-action="share">${t('Share')}</button>
+          <button class="btn danger" data-action="delete">${t('Delete')}</button>
         </div>
       </article>`;
 
@@ -176,8 +134,8 @@ async function renderRecipe(id) {
       try { Object.assign(r, await saveRecipe({ ...r, favorite: !r.favorite })); draw(); } catch (e) { toast(e.message); }
     };
     $('[data-action=delete]').onclick = async () => {
-      if (!confirm(`Delete “${r.title}”?`)) return;
-      try { await deleteRecipe(r.id); toast('Recipe deleted'); location.hash = '#/'; } catch (e) { toast(e.message); }
+      if (!confirm(t('Delete “{title}”?', { title: r.title }))) return;
+      try { await deleteRecipe(r.id); toast(t('Recipe deleted')); location.hash = '#/'; } catch (e) { toast(e.message); }
     };
     $('[data-action=share]').onclick = () => shareRecipe(r);
     $('[data-action=cook]').onclick = e => toggleCooking(e.currentTarget);
@@ -189,18 +147,18 @@ let wakeLock = null;
 async function toggleCooking(btn) {
   document.body.classList.toggle('cooking');
   const on = document.body.classList.contains('cooking');
-  btn.textContent = on ? 'Exit cooking mode' : '👩‍🍳 Cooking mode';
+  btn.textContent = on ? t('Exit cooking mode') : t('👩‍🍳 Cooking mode');
   try {
     if (on && 'wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
     else { await wakeLock?.release(); wakeLock = null; }
   } catch { /* not supported: fine */ }
-  if (on) toast('Bigger text, and the screen stays on');
+  if (on) toast(t('Bigger text, and the screen stays on'));
 }
 
 async function shareRecipe(r) {
-  const text = `${r.title}\n\n${r.servings ? `Servings: ${r.servings}\n\n` : ''}Ingredients:\n${(r.ingredients || []).map(i => `• ${i}`).join('\n')}\n\nSteps:\n${(r.steps || []).map((s, i) => `${i + 1}. ${s}`).join('\n')}${r.sourceUrl ? `\n\n${r.sourceUrl}` : ''}`;
+  const text = `${r.title}\n\n${r.servings ? `${t('Servings: {s}', { s: r.servings })}\n\n` : ''}${t('Ingredients:')}\n${(r.ingredients || []).map(i => `• ${i}`).join('\n')}\n\n${t('Steps:')}\n${(r.steps || []).map((s, i) => `${i + 1}. ${s}`).join('\n')}${r.sourceUrl ? `\n\n${r.sourceUrl}` : ''}`;
   if (navigator.share) { try { await navigator.share({ title: r.title, text }); } catch {} return; }
-  await navigator.clipboard.writeText(text); toast('Recipe copied to clipboard');
+  await navigator.clipboard.writeText(text); toast(t('Recipe copied to clipboard'));
 }
 
 async function renderEdit(id) {
@@ -209,39 +167,39 @@ async function renderEdit(id) {
   const isImport = !existing && draft;
   view.innerHTML = `
     <form class="edit" autocomplete="off">
-      <h1>${existing ? 'Edit recipe' : isImport ? 'Check the imported recipe' : 'New recipe'}</h1>
-      ${isImport ? `<p class="hint">${draft._from === 'photo' ? 'Text recognition is not perfect. Check the lines below and fix anything it misread, then save.' : 'Here is what we found. Make any changes, then save.'}</p>` : ''}
+      <h1>${existing ? t('Edit recipe') : isImport ? t('Check the imported recipe') : t('New recipe')}</h1>
+      ${isImport ? `<p class="hint">${draft._from === 'photo' && !draft._ai ? t('Text recognition is not perfect. Check the lines below and fix anything it misread, then save.') : t('Here is what we found. Make any changes, then save.')}</p>` : ''}
       ${isImport && draft._warning ? `<p class="hint warn">⚠️ ${esc(draft._warning)}</p>` : ''}
 
       <div class="photo-field">
-        <div class="photo-prev">${r.image ? `<img src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : '<span>No photo</span>'}</div>
+        <div class="photo-prev">${r.image ? `<img src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : `<span>${t('No photo')}</span>`}</div>
         <div class="photo-btns">
-          <button type="button" class="btn small" data-act="cam">📷 Take photo</button>
-          <button type="button" class="btn small" data-act="pick">Choose photo</button>
-          ${r.image ? '<button type="button" class="btn small ghost" data-act="rm">Remove</button>' : ''}
+          <button type="button" class="btn small" data-act="cam">${t('📷 Take photo')}</button>
+          <button type="button" class="btn small" data-act="pick">${t('Choose photo')}</button>
+          ${r.image ? `<button type="button" class="btn small ghost" data-act="rm">${t('Remove')}</button>` : ''}
         </div>
       </div>
 
-      <label>Title<input name="title" required value="${esc(r.title)}" placeholder="e.g. Grandma's banitsa"></label>
-      <label>Short description<input name="description" value="${esc(r.description)}"></label>
+      <label>${t('Title')}<input name="title" required value="${esc(r.title)}" placeholder="${esc(t("e.g. Grandma's banitsa"))}"></label>
+      <label>${t('Short description')}<input name="description" value="${esc(r.description)}"></label>
       <div class="row">
-        <label>Servings<input name="servings" value="${esc(r.servings)}" placeholder="4"></label>
-        <label>Prep (min)<input name="prepTime" type="number" min="0" inputmode="numeric" value="${r.prepTime ?? ''}"></label>
-        <label>Cook (min)<input name="cookTime" type="number" min="0" inputmode="numeric" value="${r.cookTime ?? ''}"></label>
-        <label>Total (min)<input name="totalTime" type="number" min="0" inputmode="numeric" value="${r.totalTime ?? ''}"></label>
+        <label>${t('Servings')}<input name="servings" value="${esc(r.servings)}" placeholder="4"></label>
+        <label>${t('Prep (min)')}<input name="prepTime" type="number" min="0" inputmode="numeric" value="${r.prepTime ?? ''}"></label>
+        <label>${t('Cook (min)')}<input name="cookTime" type="number" min="0" inputmode="numeric" value="${r.cookTime ?? ''}"></label>
+        <label>${t('Total (min)')}<input name="totalTime" type="number" min="0" inputmode="numeric" value="${r.totalTime ?? ''}"></label>
       </div>
-      <label>Ingredients <span class="muted small">one per line</span>
-        <textarea name="ingredients" rows="8" placeholder="500 g flour&#10;2 eggs&#10;1 tsp salt">${esc((r.ingredients || []).join('\n'))}</textarea></label>
-      <label>Steps <span class="muted small">one per line</span>
-        <textarea name="steps" rows="8" placeholder="Mix the flour and salt.&#10;Add the eggs...">${esc((r.steps || []).join('\n'))}</textarea></label>
-      <label>Tags <span class="muted small">comma separated</span><input name="tags" value="${esc((r.tags || []).join(', '))}" placeholder="dinner, vegetarian"></label>
-      <label>Notes<textarea name="notes" rows="3">${esc(r.notes)}</textarea></label>
-      <label>Source link<input name="sourceUrl" type="url" value="${esc(r.sourceUrl)}" placeholder="https://"></label>
-      ${r._rawText ? `<details class="raw"><summary>${draft?._from === 'photo' ? 'Recognised text from the photo' : 'Original text from the post'}</summary><pre>${esc(r._rawText)}</pre></details>` : ''}
+      <label>${t('Ingredients')} <span class="muted small">${t('one per line')}</span>
+        <textarea name="ingredients" rows="8" placeholder="${esc(t('500 g flour\n2 eggs\n1 tsp salt')).replace(/\n/g, '&#10;')}">${esc((r.ingredients || []).join('\n'))}</textarea></label>
+      <label>${t('Steps')} <span class="muted small">${t('one per line')}</span>
+        <textarea name="steps" rows="8" placeholder="${esc(t('Mix the flour and salt.\nAdd the eggs...')).replace(/\n/g, '&#10;')}">${esc((r.steps || []).join('\n'))}</textarea></label>
+      <label>${t('Tags')} <span class="muted small">${t('comma separated')}</span><input name="tags" value="${esc((r.tags || []).join(', '))}" placeholder="${t('dinner, vegetarian')}"></label>
+      <label>${t('Notes')}<textarea name="notes" rows="3">${esc(r.notes)}</textarea></label>
+      <label>${t('Source link')}<input name="sourceUrl" type="url" value="${esc(r.sourceUrl)}" placeholder="https://"></label>
+      ${r._rawText ? `<details class="raw"><summary>${draft?._from === 'photo' ? t('Recognised text from the photo') : t('Original text from the post')}</summary><pre>${esc(r._rawText)}</pre></details>` : ''}
 
       <div class="actions sticky">
-        <button type="button" class="btn" data-act="cancel">Cancel</button>
-        <button class="btn primary" type="submit">Save recipe</button>
+        <button type="button" class="btn" data-act="cancel">${t('Cancel')}</button>
+        <button class="btn primary" type="submit">${t('Save recipe')}</button>
       </div>
     </form>`;
 
@@ -256,7 +214,7 @@ async function renderEdit(id) {
   form.querySelector('[data-act=cam]').onclick = () => setPhoto(true);
   form.querySelector('[data-act=pick]').onclick = () => setPhoto(false);
   const rm = form.querySelector('[data-act=rm]');
-  if (rm) rm.onclick = () => { image = ''; $('.photo-prev').innerHTML = '<span>No photo</span>'; rm.remove(); };
+  if (rm) rm.onclick = () => { image = ''; $('.photo-prev').innerHTML = `<span>${t('No photo')}</span>`; rm.remove(); };
   form.querySelector('[data-act=cancel]').onclick = () => { draft = null; history.length > 1 ? history.back() : (location.hash = '#/'); };
 
   form.onsubmit = async e => {
@@ -264,7 +222,7 @@ async function renderEdit(id) {
     const d = Object.fromEntries(new FormData(form));
     const num = v => (v === '' ? null : Math.max(0, parseInt(v, 10)) || null);
     const btn = form.querySelector('button[type=submit]');
-    btn.disabled = true; btn.textContent = 'Saving…';
+    btn.disabled = true; btn.textContent = t('Saving…');
     let saved;
     try {
       saved = await saveRecipe({
@@ -276,12 +234,12 @@ async function renderEdit(id) {
       notes: d.notes.trim(), sourceUrl: d.sourceUrl.trim(),
       });
     } catch (ex) {
-      btn.disabled = false; btn.textContent = 'Save recipe';
+      btn.disabled = false; btn.textContent = t('Save recipe');
       toast(ex.message, 4000);
       return;
     }
     draft = null;
-    toast('Saved');
+    toast(t('Saved'));
     location.replace(`#/recipe/${saved.id}`);
   };
 }
@@ -289,36 +247,43 @@ async function renderEdit(id) {
 function renderSettings() {
   view.innerHTML = `
     <div class="settings">
-      <h1>Account</h1>
-      <p class="muted">Logged in as <b>${esc(user.email)}</b>. Your recipes are saved to your account, so they appear on every phone and computer where you log in.</p>
-      ${emailEnabled ? `<p class="small">${user.emailVerified ? '✅ Email confirmed' : '⚠️ Email not confirmed yet. <button class="link" data-act="resend">Send the link again</button>'}</p>` : ''}
-      <div class="actions"><button class="btn" data-act="logout">Log out</button></div>
+      <h1>${t('Account')}</h1>
+      <p class="muted">${t('Logged in as <b>{email}</b>. Your recipes are saved to your account, so they appear on every phone and computer where you log in.', { email: esc(user.email) })}</p>
+      ${emailEnabled ? `<p class="small">${user.emailVerified ? t('✅ Email confirmed') : `${t('⚠️ Email not confirmed yet.')} <button class="link" data-act="resend">${t('Send the link again')}</button>`}</p>` : ''}
+      <div class="actions"><button class="btn" data-act="logout">${t('Log out')}</button></div>
 
-      <h2>Change password</h2>
-      <form class="stack pw-form" autocomplete="on">
-        <input type="email" name="username" value="${esc(user.email)}" autocomplete="username" hidden>
-        <label>Current password<input name="current" type="password" required autocomplete="current-password"></label>
-        <label>New password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
-        <p class="error" hidden></p>
-        <button class="btn">Change password</button>
-      </form>
-
-      <h2>Backup</h2>
-      <p class="muted">Download all your recipes as a file, or add recipes from a backup file.</p>
-      <div class="actions">
-        <button class="btn" data-act="export">Download backup</button>
-        <button class="btn" data-act="import">Restore from backup</button>
+      <h2>${t('Language')}</h2>
+      <div class="scaler lang-pick">
+        <button class="${lang === 'bg' ? 'on' : ''}" data-lang="bg">Български</button>
+        <button class="${lang === 'en' ? 'on' : ''}" data-lang="en">English</button>
       </div>
 
-      <h2>Install on your phone</h2>
-      <p class="muted">Open this page in your phone's browser. On iPhone tap Share, then “Add to Home Screen”. On Android tap the menu, then “Install app”. It then opens like a normal app.</p>
+      <h2>${t('Change password')}</h2>
+      <form class="stack pw-form" autocomplete="on">
+        <input type="email" name="username" value="${esc(user.email)}" autocomplete="username" hidden>
+        <label>${t('Current password')}<input name="current" type="password" required autocomplete="current-password"></label>
+        <label>${t('New password')}<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="${t('At least 8 characters')}"></label>
+        <p class="error" hidden></p>
+        <button class="btn">${t('Change password')}</button>
+      </form>
 
-      <h2>Delete account</h2>
-      <p class="muted">Permanently deletes your account and all your recipes. Download a backup first if you want to keep them.</p>
-      <div class="actions"><button class="btn danger" data-act="delete">Delete my account</button></div>
+      <h2>${t('Backup')}</h2>
+      <p class="muted">${t('Download all your recipes as a file, or add recipes from a backup file.')}</p>
+      <div class="actions">
+        <button class="btn" data-act="export">${t('Download backup')}</button>
+        <button class="btn" data-act="import">${t('Restore from backup')}</button>
+      </div>
+
+      <h2>${t('Install on your phone')}</h2>
+      <p class="muted">${t("Open this page in your phone's browser. On iPhone tap Share, then “Add to Home Screen”. On Android tap the menu, then “Install app”. It then opens like a normal app.")}</p>
+
+      <h2>${t('Delete account')}</h2>
+      <p class="muted">${t('Permanently deletes your account and all your recipes. Download a backup first if you want to keep them.')}</p>
+      <div class="actions"><button class="btn danger" data-act="delete">${t('Delete my account')}</button></div>
     </div>`;
   const resendBtn = $('[data-act=resend]');
   if (resendBtn) resendBtn.onclick = () => resendVerification(resendBtn);
+  $$('[data-lang]').forEach(b => (b.onclick = () => { setLang(b.dataset.lang); renderChrome(); renderSettings(); }));
   const pw = $('.pw-form');
   pw.onsubmit = async e => {
     e.preventDefault();
@@ -326,7 +291,7 @@ function renderSettings() {
     btn.disabled = true; err.hidden = true;
     try {
       await api('/api/password', { method: 'POST', body: { current: pw.current.value, password: pw.password.value } });
-      pw.reset(); toast('Password changed. Other devices were logged out.', 4000);
+      pw.reset(); toast(t('Password changed. Other devices were logged out.'), 4000);
     } catch (ex) { err.textContent = ex.message; err.hidden = false; }
     btn.disabled = false;
   };
@@ -334,27 +299,21 @@ function renderSettings() {
     try { await logOut(); user = null; location.hash = '#/'; route(); } catch (e) { toast(e.message); }
   };
   $('[data-act=delete]').onclick = async () => {
-    if (prompt(`This deletes your account and all your recipes forever. Type DELETE to confirm.`) !== 'DELETE') return;
-    try { await deleteAccount(); user = null; toast('Your account was deleted'); location.hash = '#/'; route(); } catch (e) { toast(e.message); }
+    if (prompt(t('This deletes your account and all your recipes forever. Type DELETE to confirm.')) !== 'DELETE') return;
+    try { await deleteAccount(); user = null; toast(t('Your account was deleted')); location.hash = '#/'; route(); } catch (e) { toast(e.message); }
   };
   $('[data-act=export]').onclick = async () => {
     const data = JSON.stringify({ app: 'recipe-box', version: 2, exportedAt: new Date().toISOString(), recipes: await allRecipes() });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
-    a.download = `recipes-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
+    download(`recipes-${new Date().toISOString().slice(0, 10)}.json`, data);
   };
-  $('[data-act=import]').onclick = () => {
-    const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'application/json,.json';
-    input.onchange = async () => {
-      let list;
-      try { const data = JSON.parse(await input.files[0].text()); list = Array.isArray(data) ? data : data.recipes; if (!Array.isArray(list)) throw 0; }
-      catch { toast('That file is not a recipe backup'); return; }
-      try { const n = await importAll(list, k => toast(`Restoring… ${k} of ${list.length}`)); toast(`Restored ${n} recipes`); }
-      catch (e) { toast(e.message, 4000); }
-    };
-    input.click();
+  $('[data-act=import]').onclick = async () => {
+    const [file] = await pickFiles({ accept: 'application/json,.json' });
+    if (!file) return;
+    let list;
+    try { const data = JSON.parse(await file.text()); list = Array.isArray(data) ? data : data.recipes; if (!Array.isArray(list)) throw 0; }
+    catch { toast(t('That file is not a recipe backup')); return; }
+    try { const n = await importAll(list, k => toast(t('Restoring… {k} of {n}', { k, n: list.length }))); toast(t('Restored {n} recipes', { n })); }
+    catch (e) { toast(e.message, 4000); }
   };
 }
 
@@ -365,19 +324,20 @@ function renderAuth(mode = 'login') {
     <div class="auth">
       <div class="auth-hero">
         <div class="empty-icon">🍲</div>
-        <h1>${signup ? 'Create your recipe box' : 'Welcome back'}</h1>
-        <p class="muted">Save your recipes, snap them from a cookbook with your camera, or import them from any recipe website. They follow you to every device.</p>
+        <h1>${signup ? t('Create your recipe box') : t('Welcome back')}</h1>
+        <p class="muted">${t('Save your recipes, snap them from a cookbook with your camera, or import them from any recipe website. They follow you to every device.')}</p>
       </div>
       <form class="stack" autocomplete="on">
-        ${signup ? '<label>Your name<input name="name" autocomplete="name" placeholder="Optional"></label>' : ''}
-        <label>Email<input name="email" type="email" required autocomplete="email" inputmode="email"></label>
-        <label>Password<input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="${signup ? 'At least 8 characters' : ''}"></label>
+        ${signup ? `<label>${t('Your name')}<input name="name" autocomplete="name" placeholder="${t('Optional')}"></label>` : ''}
+        <label>${t('Email')}<input name="email" type="email" required autocomplete="email" inputmode="email"></label>
+        <label>${t('Password')}<input name="password" type="password" required minlength="${signup ? 8 : 1}" autocomplete="${signup ? 'new-password' : 'current-password'}" placeholder="${signup ? t('At least 8 characters') : ''}"></label>
         <p class="error" hidden></p>
-        <button class="btn primary">${signup ? 'Create account' : 'Log in'}</button>
-        ${!signup && emailEnabled ? '<a href="#" class="center small" data-forgot>Forgot your password?</a>' : ''}
+        <button class="btn primary">${signup ? t('Create account') : t('Log in')}</button>
+        ${!signup && emailEnabled ? `<a href="#" class="center small" data-forgot>${t('Forgot your password?')}</a>` : ''}
       </form>
-      <p class="center muted">${signup ? 'Already have an account?' : 'New here?'}
-        <a href="#" data-switch>${signup ? 'Log in' : 'Create an account'}</a></p>
+      <p class="center muted">${signup ? t('Already have an account?') : t('New here?')}
+        <a href="#" data-switch>${signup ? t('Log in') : t('Create an account')}</a></p>
+      <p class="center small muted legal-links"><a href="/privacy.html">${t('Privacy policy')}</a> · <a href="/terms.html">${t('Terms of use')}</a></p>
     </div>`;
   $('[data-switch]').onclick = e => { e.preventDefault(); renderAuth(signup ? 'login' : 'signup'); };
   const forgot = $('[data-forgot]');
@@ -390,7 +350,7 @@ function renderAuth(mode = 'login') {
     const body = Object.fromEntries(new FormData(form));
     try {
       user = await (signup ? signUp(body) : logIn(body));
-      $('#settings-link').hidden = false;
+      renderChrome();
       await offerLegacyMove();
       route();
       if (pendingSharedUrl) { openUrlSheet(pendingSharedUrl); pendingSharedUrl = null; }
@@ -400,7 +360,7 @@ function renderAuth(mode = 'login') {
 
 async function resendVerification(btn) {
   btn.disabled = true;
-  try { await api('/api/verify/send', { method: 'POST', body: {} }); toast(`Sent. Check your inbox at ${user.email}`, 4000); }
+  try { await api('/api/verify/send', { method: 'POST', body: {} }); toast(t('Sent. Check your inbox at {email}', { email: user.email }), 4000); }
   catch (e) { toast(e.message, 4000); btn.disabled = false; }
 }
 
@@ -410,13 +370,13 @@ function authShell(title, text, inner) {
 }
 
 function renderForgot(email = '') {
-  authShell('Forgot your password?', 'Enter your email and we will send you a link to choose a new password.', `
+  authShell(t('Forgot your password?'), t('Enter your email and we will send you a link to choose a new password.'), `
     <form class="stack">
-      <label>Email<input name="email" type="email" required autocomplete="email" inputmode="email" value="${esc(email)}"></label>
+      <label>${t('Email')}<input name="email" type="email" required autocomplete="email" inputmode="email" value="${esc(email)}"></label>
       <p class="error" hidden></p>
-      <button class="btn primary">Send reset link</button>
+      <button class="btn primary">${t('Send reset link')}</button>
     </form>
-    <p class="center muted"><a href="#" data-back>Back to log in</a></p>`);
+    <p class="center muted"><a href="#" data-back>${t('Back to log in')}</a></p>`);
   $('[data-back]').onclick = e => { e.preventDefault(); renderAuth(); };
   const form = $('.auth form');
   form.onsubmit = async e => {
@@ -425,19 +385,19 @@ function renderForgot(email = '') {
     btn.disabled = true; err.hidden = true;
     try {
       await api('/api/forgot', { method: 'POST', body: { email: form.email.value } });
-      authShell('Check your email', `If there is an account for <b>${esc(form.email.value)}</b>, we just sent it a link to choose a new password. The link works for 1 hour. Check your spam folder too.`,
-        '<p class="center"><a href="#" data-back>Back to log in</a></p>');
+      authShell(t('Check your email'), t('If there is an account for <b>{email}</b>, we just sent it a link to choose a new password. The link works for 1 hour. Check your spam folder too.', { email: esc(form.email.value) }),
+        `<p class="center"><a href="#" data-back>${t('Back to log in')}</a></p>`);
       $('[data-back]').onclick = ev => { ev.preventDefault(); renderAuth(); };
     } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
   };
 }
 
 function renderReset(token) {
-  authShell('Choose a new password', '', `
+  authShell(t('Choose a new password'), '', `
     <form class="stack">
-      <label>New password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <label>${t('New password')}<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="${t('At least 8 characters')}"></label>
       <p class="error" hidden></p>
-      <button class="btn primary">Save new password</button>
+      <button class="btn primary">${t('Save new password')}</button>
     </form>`);
   const form = $('.auth form');
   form.onsubmit = async e => {
@@ -446,21 +406,21 @@ function renderReset(token) {
     btn.disabled = true; err.hidden = true;
     try {
       ({ user } = await api('/api/reset', { method: 'POST', body: { token, password: form.password.value } }));
-      $('#settings-link').hidden = false;
-      toast('Password changed. You are logged in.', 4000);
+      renderChrome();
+      toast(t('Password changed. You are logged in.'), 4000);
       location.replace('#/');
     } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
   };
 }
 
 async function renderVerify(token) {
-  authShell('Confirming your email…', '', '');
+  authShell(t('Confirming your email…'), '', '');
   try {
     const res = await api('/api/verify', { method: 'POST', body: { token } });
     if (user && user.id === res.user.id) user = res.user;
-    authShell('Email confirmed ✅', 'Thanks! Your email address is confirmed.', `<p class="center"><a class="btn primary" href="#/">${user ? 'Go to my recipes' : 'Log in'}</a></p>`);
+    authShell(t('Email confirmed ✅'), t('Thanks! Your email address is confirmed.'), `<p class="center"><a class="btn primary" href="#/">${user ? t('Go to my recipes') : t('Log in')}</a></p>`);
   } catch (e) {
-    authShell('Link not valid', esc(e.message), `<p class="center"><a class="btn" href="#/">Open Recipe Box</a></p>`);
+    authShell(t('Link not valid'), esc(e.message), `<p class="center"><a class="btn" href="#/">${t('Open Recipe Box')}</a></p>`);
   }
 }
 
@@ -469,30 +429,20 @@ async function offerLegacyMove() {
   let list = [];
   try { list = await legacyRecipes(); } catch { return; }
   if (!list.length) return;
-  if (!confirm(`This device has ${list.length} recipe${list.length > 1 ? 's' : ''} saved from before you had an account. Add ${list.length > 1 ? 'them' : 'it'} to your account?`)) return;
-  try { toast(`Added ${await moveLegacyRecipes()} recipes to your account`); } catch (e) { toast(e.message, 4000); }
+  if (!confirm(t('This device has {n} recipes saved from before you had an account. Add them to your account?', { n: list.length }))) return;
+  try { toast(t('Added {n} recipes to your account', { n: await moveLegacyRecipes() })); } catch (e) { toast(e.message, 4000); }
 }
 
 // ---------- add / import ----------
-function openSheet(html, onMount) {
-  const sheet = $('#sheet');
-  sheet.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet-panel" role="dialog" aria-modal="true">${html}</div>`;
-  sheet.hidden = false;
-  const close = () => { sheet.hidden = true; sheet.innerHTML = ''; };
-  sheet.querySelector('.sheet-backdrop').onclick = close;
-  onMount?.(sheet.querySelector('.sheet-panel'), close);
-  return close;
-}
-
 function openAddSheet() {
   openSheet(`
-    <h2>Add a recipe</h2>
+    <h2>${t('Add a recipe')}</h2>
     <div class="add-options">
-      <button data-a="cam"><span>📷</span><b>Take a photo</b><small>Of a cookbook page or a handwritten card</small></button>
-      <button data-a="upload"><span>🖼️</span><b>Upload photos</b><small>One or more pictures of a recipe</small></button>
-      <button data-a="url"><span>🔗</span><b>From a link</b><small>Recipe website, YouTube, TikTok, Instagram or Facebook</small></button>
-      <button data-a="paste"><span>📋</span><b>Paste text</b><small>Copied from a message or a document</small></button>
-      <button data-a="manual"><span>✍️</span><b>Write it myself</b><small>Start with an empty recipe</small></button>
+      <button data-a="cam"><span>📷</span><b>${t('Take a photo')}</b><small>${t('Of a cookbook page or a handwritten card')}</small></button>
+      <button data-a="upload"><span>🖼️</span><b>${t('Upload photos')}</b><small>${t('One or more pictures of a recipe')}</small></button>
+      <button data-a="url"><span>🔗</span><b>${t('From a link')}</b><small>${t('Recipe website, YouTube, TikTok, Instagram or Facebook')}</small></button>
+      <button data-a="paste"><span>📋</span><b>${t('Paste text')}</b><small>${t('Copied from a message or a document')}</small></button>
+      <button data-a="manual"><span>✍️</span><b>${t('Write it myself')}</b><small>${t('Start with an empty recipe')}</small></button>
     </div>`, (panel, close) => {
     panel.querySelector('[data-a=manual]').onclick = () => { close(); draft = null; location.hash = '#/new'; };
     panel.querySelector('[data-a=cam]').onclick = async () => { close(); importFromPhotos(await pickFiles({ camera: true })); };
@@ -504,25 +454,25 @@ function openAddSheet() {
 
 function openUrlSheet(prefill = '') {
   openSheet(`
-    <h2>Import from a link</h2>
-    <p class="muted small">Recipe websites, YouTube videos and Shorts, TikTok, Instagram and Facebook posts. From a post, we read the recipe from its caption${aiEnabled ? ' and, for YouTube, from what is said in the video' : ''}.</p>
+    <h2>${t('Import from a link')}</h2>
+    <p class="muted small">${aiEnabled ? t('Recipe websites, YouTube videos and Shorts, TikTok, Instagram and Facebook posts. From a post, we read the recipe from its caption and, for YouTube, from what is said in the video.') : t('Recipe websites, YouTube videos and Shorts, TikTok, Instagram and Facebook posts. From a post, we read the recipe from its caption.')}</p>
     <form class="stack">
       <input name="url" type="url" required placeholder="https://www.example.com/recipe" value="${esc(prefill)}" autofocus>
       <p class="error" hidden></p>
-      <button class="btn primary">Import</button>
+      <button class="btn primary">${t('Import')}</button>
     </form>`, (panel, close) => {
     const form = panel.querySelector('form');
     form.onsubmit = async e => {
       e.preventDefault();
       const btn = form.querySelector('button'); const err = form.querySelector('.error');
-      btn.disabled = true; btn.textContent = /youtu|tiktok|instagram|facebook|fb\.watch/i.test(form.url.value) ? 'Reading the post… (can take up to 30 seconds)' : 'Reading the page…'; err.hidden = true;
+      btn.disabled = true; btn.textContent = /youtu|tiktok|instagram|facebook|fb\.watch/i.test(form.url.value) ? t('Reading the post… (can take up to 30 seconds)') : t('Reading the page…'); err.hidden = true;
       try {
-        const data = await api(`/api/import?url=${encodeURIComponent(form.url.value.trim())}`);
+        const data = await api(`/api/import?url=${encodeURIComponent(form.url.value.trim())}&lang=${lang}`);
         draft = { ...data, _from: 'url' };
         close(); location.hash = '#/new';
       } catch (ex) {
         err.textContent = ex.message;
-        err.hidden = false; btn.disabled = false; btn.textContent = 'Import';
+        err.hidden = false; btn.disabled = false; btn.textContent = t('Import');
       }
     };
   });
@@ -530,10 +480,10 @@ function openUrlSheet(prefill = '') {
 
 function openPasteSheet() {
   openSheet(`
-    <h2>Paste recipe text</h2>
+    <h2>${t('Paste recipe text')}</h2>
     <form class="stack">
-      <textarea name="text" rows="10" required placeholder="Paste the whole recipe here. We will find the title, ingredients and steps."></textarea>
-      <button class="btn primary">Continue</button>
+      <textarea name="text" rows="10" required placeholder="${t('Paste the whole recipe here. We will find the title, ingredients and steps.')}"></textarea>
+      <button class="btn primary">${t('Continue')}</button>
     </form>`, (panel, close) => {
     panel.querySelector('form').onsubmit = e => {
       e.preventDefault();
@@ -551,7 +501,7 @@ function loadTesseract() {
     const s = document.createElement('script');
     s.src = '/vendor/tesseract/tesseract.min.js';
     s.onload = () => resolve(window.Tesseract);
-    s.onerror = () => { tesseractLoading = null; reject(new Error('Could not load text recognition. Check your connection and try again.')); };
+    s.onerror = () => { tesseractLoading = null; reject(new Error(t('Could not load text recognition. Check your connection and try again.'))); };
     document.head.appendChild(s);
   });
   return tesseractLoading;
@@ -561,28 +511,30 @@ async function importFromPhotos(files) {
   if (!files?.length) return;
   let cancelled = false;
   const close = openSheet(`
-    <h2>Reading your recipe</h2>
+    <h2>${t('Reading your recipe')}</h2>
     <div class="ocr-thumbs"></div>
     <div class="progress"><div class="bar"></div></div>
-    <p class="muted small status">Preparing…</p>
-    <button class="btn ghost" data-a="cancel">Cancel</button>`, (panel, closeFn) => {
+    <p class="muted small status">${t('Preparing…')}</p>
+    <button class="btn ghost" data-a="cancel">${t('Cancel')}</button>`, (panel, closeFn) => {
     panel.querySelector('[data-a=cancel]').onclick = () => { cancelled = true; closeFn(); };
   });
   const panel = $('#sheet .sheet-panel');
-  const status = t => panel && (panel.querySelector('.status').textContent = t);
+  const status = text => panel && (panel.querySelector('.status').textContent = text);
   const bar = p => panel && (panel.querySelector('.bar').style.width = `${Math.round(p * 100)}%`);
 
   try {
     const images = await Promise.all(files.map(f => resizeImage(f, 2200, 0.9)));
     panel.querySelector('.ocr-thumbs').innerHTML = images.map(src => `<img src="${src}" alt="">`).join('');
-    status('Loading text recognition (first time takes a little longer)…');
+    status(t('Loading text recognition (first time takes a little longer)…'));
     const Tesseract = await loadTesseract();
     let current = 0;
     const worker = await Tesseract.createWorker(['bul', 'eng'], 1, {
       workerPath: '/vendor/tesseract/worker.min.js', corePath: '/vendor/core', langPath: '/vendor/lang',
       logger: m => {
-        if (m.status === 'recognizing text') { bar((current + m.progress) / images.length); status(`Reading text${images.length > 1 ? ` (photo ${current + 1} of ${images.length})` : ''}… ${Math.round(m.progress * 100)}%`); }
-        else if (m.status) status(m.status.replace(/^\w/, c => c.toUpperCase()) + '…');
+        if (m.status !== 'recognizing text') return;
+        const p = Math.round(m.progress * 100);
+        bar((current + m.progress) / images.length);
+        status(images.length > 1 ? t('Reading text (photo {i} of {n})… {p}%', { i: current + 1, n: images.length, p }) : t('Reading text… {p}%', { p }));
       },
     });
     const texts = [];
@@ -594,14 +546,23 @@ async function importFromPhotos(files) {
     await worker.terminate();
     if (cancelled) return;
     const raw = texts.join('\n');
-    if (raw.replace(/\s/g, '').length < 15) throw new Error('No readable text found. Try a sharper, well lit photo taken straight on.');
+    if (raw.replace(/\s/g, '').length < 15) throw new Error(t('No readable text found. Try a sharper, well lit photo taken straight on.'));
     draft = { ...parseRecipeText(raw), image: await resizeImage(files[0]), _rawText: raw, _from: 'photo' };
     close(); location.hash = '#/new';
   } catch (e) {
     if (cancelled) return;
     status(e.message); panel.querySelector('.status').classList.add('error');
-    panel.querySelector('[data-a=cancel]').textContent = 'Close';
+    panel.querySelector('[data-a=cancel]').textContent = t('Close');
   }
+}
+
+// Top bar: language switch and labels that depend on the language
+function renderChrome() {
+  $('#settings-link').hidden = !user;
+  $('#back').setAttribute('aria-label', t('Back'));
+  const lb = $('#lang-btn');
+  lb.textContent = lang === 'bg' ? 'EN' : 'БГ';
+  lb.setAttribute('aria-label', lang === 'bg' ? 'Switch to English' : 'Превключи на български');
 }
 
 // ---------- router ----------
@@ -626,6 +587,7 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-action=add]') || e.target.closest('#fab')) openAddSheet();
 });
 $('#back').onclick = () => (history.length > 1 ? history.back() : (location.hash = '#/'));
+$('#lang-btn').onclick = () => { setLang(lang === 'bg' ? 'en' : 'bg'); renderChrome(); route(); };
 window.addEventListener('hashchange', route);
 
 // Share target: Android "Share → Recipe Box" with a link
@@ -636,7 +598,7 @@ if (sharedUrl) history.replaceState(null, '', '/#/');
 (async () => {
   try { user = await currentUser(); } catch { user = null; }
   try { ({ emailEnabled, aiEnabled } = await api('/api/config')); } catch { /* offline */ }
-  $('#settings-link').hidden = !user;
+  renderChrome();
   await route();
   if (sharedUrl) { if (user) openUrlSheet(sharedUrl); else pendingSharedUrl = sharedUrl; }
 })();

@@ -1,0 +1,227 @@
+// Bulgarian / English. English text is the key; Bulgarian comes from the table below.
+// Placeholders use {name}. Missing translations fall back to English.
+
+const STORAGE_KEY = 'rb-lang';
+
+function detect() {
+  try { const saved = localStorage.getItem(STORAGE_KEY); if (saved === 'bg' || saved === 'en') return saved; } catch {}
+  return (navigator.languages || [navigator.language || 'en']).some(l => /^bg\b/i.test(l)) ? 'bg' : 'en';
+}
+
+export let lang = detect();
+document.documentElement.lang = lang;
+
+export function setLang(l) {
+  try { localStorage.setItem(STORAGE_KEY, l); } catch {}
+  lang = l;
+  document.documentElement.lang = l;
+}
+
+export function t(key, vars = {}) {
+  const s = (lang === 'bg' && BG[key]) || key;
+  return s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+}
+
+// Counted nouns: tn(3, 'ingredient', 'ingredients')
+export function tn(n, one, many) {
+  if (lang === 'bg') return `${n} ${BG[n === 1 ? one : many] || (n === 1 ? one : many)}`;
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+const BG = {
+  // general
+  'Recipe Box': 'Recipe Box',
+  'Back': 'Назад',
+  'Cancel': 'Отказ',
+  'Close': 'Затвори',
+  'Save': 'Запази',
+  'Saved': 'Запазено',
+  'Saving…': 'Запазване…',
+  'Delete': 'Изтрий',
+  'Edit': 'Редактирай',
+  'Share': 'Сподели',
+  'Continue': 'Продължи',
+  'Import': 'Импортирай',
+  'Search recipes or ingredients': 'Търсене на рецепти или продукти',
+  'Search': 'Търсене',
+  'All': 'Всички',
+  '★ Favourites': '★ Любими',
+  'Favourite': 'Любима',
+  'Hide': 'Скрий',
+  'Language': 'Език',
+  'min': 'мин',
+  'h': 'ч',
+  'ingredient': 'продукт',
+  'ingredients': 'продукта',
+  'recipe': 'рецепта',
+  'recipes': 'рецепти',
+
+  // list
+  'No recipes yet': 'Още няма рецепти',
+  'Add your first one. Write it yourself, snap a photo of a cookbook page, or paste a link.': 'Добавете първата си рецепта. Напишете я сами, снимайте страница от готварска книга или поставете връзка.',
+  'Add a recipe': 'Добави рецепта',
+  'Nothing matches “{q}”.': 'Няма резултати за „{q}“.',
+  '📧 Please confirm your email. We sent a link to <b>{email}</b>.': '📧 Моля, потвърдете имейла си. Изпратихме връзка до <b>{email}</b>.',
+  'Send again': 'Изпрати отново',
+
+  // recipe view
+  'Ingredients': 'Продукти',
+  'Steps': 'Начин на приготвяне',
+  'Notes': 'Бележки',
+  'Source:': 'Източник:',
+  'Prep {t}': 'Подготовка {t}',
+  'Cook {t}': 'Готвене {t}',
+  'Scale recipe': 'Промени количеството',
+  '👩‍🍳 Cooking mode': '👩‍🍳 Режим готвене',
+  'Exit cooking mode': 'Изход от режим готвене',
+  'Bigger text, and the screen stays on': 'По-голям текст, а екранът остава включен',
+  'Delete “{title}”?': 'Да се изтрие ли „{title}“?',
+  'Recipe deleted': 'Рецептата е изтрита',
+  'Recipe copied to clipboard': 'Рецептата е копирана',
+  'Servings: {s}': 'Порции: {s}',
+  'Ingredients:': 'Продукти:',
+  'Steps:': 'Начин на приготвяне:',
+
+  // edit
+  'Edit recipe': 'Редактиране на рецепта',
+  'Check the imported recipe': 'Проверете импортираната рецепта',
+  'New recipe': 'Нова рецепта',
+  'Text recognition is not perfect. Check the lines below and fix anything it misread, then save.': 'Разпознаването на текст не е перфектно. Проверете редовете по-долу, поправете грешките и запазете.',
+  'Here is what we found. Make any changes, then save.': 'Ето какво открихме. Направете промени, ако е нужно, и запазете.',
+  'No photo': 'Без снимка',
+  '📷 Take photo': '📷 Снимай',
+  'Choose photo': 'Избери снимка',
+  'Remove': 'Премахни',
+  'Title': 'Заглавие',
+  "e.g. Grandma's banitsa": 'напр. Баницата на баба',
+  'Short description': 'Кратко описание',
+  'Servings': 'Порции',
+  'Prep (min)': 'Подготовка (мин)',
+  'Cook (min)': 'Готвене (мин)',
+  'Total (min)': 'Общо (мин)',
+  'one per line': 'по един на ред',
+  'comma separated': 'разделени със запетая',
+  '500 g flour\n2 eggs\n1 tsp salt': '500 г брашно\n2 яйца\n1 ч.л. сол',
+  'Mix the flour and salt.\nAdd the eggs...': 'Смесете брашното и солта.\nДобавете яйцата...',
+  'Tags': 'Етикети',
+  'dinner, vegetarian': 'вечеря, вегетарианско',
+  'Source link': 'Връзка към източника',
+  'Recognised text from the photo': 'Разпознат текст от снимката',
+  'Original text from the post': 'Оригинален текст от публикацията',
+  'Save recipe': 'Запази рецептата',
+
+  // settings
+  'Account': 'Профил',
+  'Logged in as <b>{email}</b>. Your recipes are saved to your account, so they appear on every phone and computer where you log in.': 'Влезли сте като <b>{email}</b>. Рецептите ви са запазени в профила ви и се виждат на всеки телефон и компютър, на който влезете.',
+  '✅ Email confirmed': '✅ Имейлът е потвърден',
+  '⚠️ Email not confirmed yet.': '⚠️ Имейлът още не е потвърден.',
+  'Send the link again': 'Изпрати връзката отново',
+  'Log out': 'Изход',
+  'Change password': 'Смяна на паролата',
+  'Current password': 'Текуща парола',
+  'New password': 'Нова парола',
+  'At least 8 characters': 'Поне 8 символа',
+  'Password changed. Other devices were logged out.': 'Паролата е сменена. Другите устройства бяха отписани.',
+  'Backup': 'Резервно копие',
+  'Download all your recipes as a file, or add recipes from a backup file.': 'Изтеглете всичките си рецепти като файл или добавете рецепти от резервно копие.',
+  'Download backup': 'Изтегли копие',
+  'Restore from backup': 'Възстанови от копие',
+  'That file is not a recipe backup': 'Този файл не е резервно копие на рецепти',
+  'Restoring… {k} of {n}': 'Възстановяване… {k} от {n}',
+  'Restored {n} recipes': 'Възстановени рецепти: {n}',
+  'Install on your phone': 'Инсталиране на телефона',
+  "Open this page in your phone's browser. On iPhone tap Share, then “Add to Home Screen”. On Android tap the menu, then “Install app”. It then opens like a normal app.": 'Отворете тази страница в браузъра на телефона. На iPhone натиснете „Сподели“, после „Добави към началния екран“. На Android отворете менюто и изберете „Инсталиране на приложението“. След това се отваря като обикновено приложение.',
+  'Delete account': 'Изтриване на профила',
+  'Permanently deletes your account and all your recipes. Download a backup first if you want to keep them.': 'Изтрива завинаги профила ви и всичките ви рецепти. Първо изтеглете резервно копие, ако искате да ги запазите.',
+  'Delete my account': 'Изтрий профила ми',
+  'This deletes your account and all your recipes forever. Type DELETE to confirm.': 'Това ще изтрие профила ви и всичките ви рецепти завинаги. Напишете DELETE, за да потвърдите.',
+  'Your account was deleted': 'Профилът ви е изтрит',
+
+  // auth
+  'Create your recipe box': 'Създайте своята книга с рецепти',
+  'Welcome back': 'Добре дошли отново',
+  'Save your recipes, snap them from a cookbook with your camera, or import them from any recipe website. They follow you to every device.': 'Запазвайте рецепти, снимайте ги от готварски книги или ги импортирайте от всеки сайт с рецепти. Те са с вас на всяко устройство.',
+  'Your name': 'Вашето име',
+  'Optional': 'По желание',
+  'Email': 'Имейл',
+  'Password': 'Парола',
+  'Create account': 'Създай профил',
+  'Log in': 'Вход',
+  'Forgot your password?': 'Забравена парола?',
+  'Already have an account?': 'Вече имате профил?',
+  'New here?': 'Нов потребител?',
+  'Create an account': 'Създайте профил',
+  'Sent. Check your inbox at {email}': 'Изпратено. Проверете пощата си на {email}',
+  'Enter your email and we will send you a link to choose a new password.': 'Въведете имейла си и ще ви изпратим връзка за избор на нова парола.',
+  'Send reset link': 'Изпрати връзка',
+  'Back to log in': 'Обратно към входа',
+  'Check your email': 'Проверете пощата си',
+  'If there is an account for <b>{email}</b>, we just sent it a link to choose a new password. The link works for 1 hour. Check your spam folder too.': 'Ако има профил с <b>{email}</b>, току-що изпратихме връзка за нова парола. Връзката е валидна 1 час. Проверете и папката за спам.',
+  'Choose a new password': 'Изберете нова парола',
+  'Save new password': 'Запази новата парола',
+  'Password changed. You are logged in.': 'Паролата е сменена. Влезли сте в профила си.',
+  'Confirming your email…': 'Потвърждаване на имейла…',
+  'Email confirmed ✅': 'Имейлът е потвърден ✅',
+  'Thanks! Your email address is confirmed.': 'Благодарим! Имейл адресът ви е потвърден.',
+  'Go to my recipes': 'Към моите рецепти',
+  'Link not valid': 'Невалидна връзка',
+  'Open Recipe Box': 'Отвори Recipe Box',
+  'This device has {n} recipes saved from before you had an account. Add them to your account?': 'На това устройство има {n} рецепти, запазени преди да имате профил. Да се добавят ли към профила ви?',
+  'Added {n} recipes to your account': 'Добавени рецепти към профила: {n}',
+
+  // add / import
+  'Take a photo': 'Снимай',
+  'Of a cookbook page or a handwritten card': 'Страница от готварска книга или ръкописна рецепта',
+  'Upload photos': 'Качи снимки',
+  'One or more pictures of a recipe': 'Една или повече снимки на рецепта',
+  'From a link': 'От връзка',
+  'Recipe website, YouTube, TikTok, Instagram or Facebook': 'Сайт с рецепти, YouTube, TikTok, Instagram или Facebook',
+  'Paste text': 'Постави текст',
+  'Copied from a message or a document': 'Копиран от съобщение или документ',
+  'Write it myself': 'Ще я напиша сам',
+  'Start with an empty recipe': 'Започнете с празна рецепта',
+  'Import from a link': 'Импорт от връзка',
+  'Recipe websites, YouTube videos and Shorts, TikTok, Instagram and Facebook posts. From a post, we read the recipe from its caption.': 'Сайтове с рецепти, видеа и Shorts в YouTube, публикации в TikTok, Instagram и Facebook. От публикация четем рецептата от описанието ѝ.',
+  'Recipe websites, YouTube videos and Shorts, TikTok, Instagram and Facebook posts. From a post, we read the recipe from its caption and, for YouTube, from what is said in the video.': 'Сайтове с рецепти, видеа и Shorts в YouTube, публикации в TikTok, Instagram и Facebook. От публикация четем рецептата от описанието ѝ, а при YouTube и от казаното във видеото.',
+  'Reading the post… (can take up to 30 seconds)': 'Четене на публикацията… (може да отнеме до 30 секунди)',
+  'Reading the page…': 'Четене на страницата…',
+  'Paste recipe text': 'Поставете текста на рецептата',
+  'Paste the whole recipe here. We will find the title, ingredients and steps.': 'Поставете цялата рецепта тук. Ще открием заглавието, продуктите и стъпките.',
+  'Reading your recipe': 'Четем рецептата ви',
+  'Preparing…': 'Подготовка…',
+  'Loading text recognition (first time takes a little longer)…': 'Зареждане на разпознаването на текст (първия път отнема повече време)…',
+  'Reading text… {p}%': 'Четене на текста… {p}%',
+  'Reading text (photo {i} of {n})… {p}%': 'Четене на текста (снимка {i} от {n})… {p}%',
+  'Could not load text recognition. Check your connection and try again.': 'Разпознаването на текст не се зареди. Проверете връзката и опитайте отново.',
+  'No readable text found. Try a sharper, well lit photo taken straight on.': 'Не открихме четим текст. Опитайте с по-рязка и добре осветена снимка, направена отпред.',
+  'Could not read that image': 'Снимката не може да бъде прочетена',
+
+  'Privacy policy': 'Политика за поверителност',
+  'Terms of use': 'Условия за ползване',
+
+  // server / API messages
+  'You are offline. Connect to the internet and try again.': 'Няма връзка с интернет. Свържете се и опитайте отново.',
+  'Something went wrong': 'Нещо се обърка',
+  'Please log in': 'Моля, влезте в профила си',
+  'Wrong email or password': 'Грешен имейл или парола',
+  'Please enter a valid email address': 'Моля, въведете валиден имейл адрес',
+  'The password needs at least 8 characters': 'Паролата трябва да е поне 8 символа',
+  'The new password needs at least 8 characters': 'Новата парола трябва да е поне 8 символа',
+  'An account with this email already exists. Try logging in.': 'Вече има профил с този имейл. Опитайте да влезете.',
+  'Too many attempts. Please wait 15 minutes and try again.': 'Твърде много опити. Изчакайте 15 минути и опитайте отново.',
+  'Too many requests. Please wait 15 minutes and try again.': 'Твърде много заявки. Изчакайте 15 минути и опитайте отново.',
+  'Your current password is not right': 'Текущата парола не е вярна',
+  'This link has expired or was already used. Send a new one from the app settings.': 'Връзката е изтекла или вече е използвана. Изпратете нова от настройките.',
+  'This reset link has expired or was already used. Ask for a new one.': 'Връзката за нова парола е изтекла или вече е използвана. Поискайте нова.',
+  'That is too large. Try a smaller photo.': 'Твърде голямо е. Опитайте с по-малка снимка.',
+  'Recipe limit reached': 'Достигнат е лимитът за рецепти',
+  'Too many changes. Please try again later.': 'Твърде много промени. Опитайте по-късно.',
+  'No recipe found on that page. Try copying the text and using "Paste text" instead.': 'На тази страница няма рецепта. Копирайте текста и използвайте „Постави текст“.',
+  'You have imported a lot of links this hour. Please try again later.': 'Импортирахте много връзки този час. Опитайте по-късно.',
+  "You have reached today's limit for social media imports. Please try again tomorrow.": 'Достигнахте дневния лимит за импорт от социални мрежи. Опитайте утре.',
+  'Password reset by email is not available yet.': 'Смяната на парола по имейл още не е налична.',
+  'Email is not available yet.': 'Имейлите още не са налични.',
+  'Could not send the email right now. Please try again in an hour.': 'Имейлът не можа да бъде изпратен. Опитайте отново след час.',
+  'Not found': 'Не е намерено',
+  'Server error': 'Грешка в сървъра',
+};

@@ -1,19 +1,22 @@
 // Recipes live on the server, per account. A copy is kept on the device (IndexedDB)
-// so your recipes still open when you're offline.
+// so your recipes still open when you're offline. Changes made offline wait in an
+// "outbox" and are sent as soon as the device is back online.
 import { t } from './i18n.js';
 
 const DB_NAME = 'recipe-box';
 const LEGACY = 'recipes'; // version 1 kept recipes only on the device
 const CACHE = 'cache';
+const OUTBOX = 'outbox'; // { id, op: 'save' | 'delete', data, at } — one entry per recipe, latest change wins
 let dbPromise;
 
 function open() {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(LEGACY)) db.createObjectStore(LEGACY, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(CACHE)) db.createObjectStore(CACHE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(OUTBOX)) db.createObjectStore(OUTBOX, { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -66,6 +69,7 @@ export async function currentUser() {
 export const signUp = body => api('/api/signup', { method: 'POST', body }).then(r => r.user);
 export const logIn = body => api('/api/login', { method: 'POST', body }).then(r => r.user);
 export async function logOut() {
+  await syncOutbox();
   await api('/api/logout', { method: 'POST', body: {} });
   await clearCache();
 }
@@ -76,6 +80,7 @@ export async function deleteAccount() {
 async function clearCache() {
   try { localStorage.removeItem('rb-user'); LIST_KEYS.forEach(k => localStorage.removeItem(LIST_PREFIX + k)); } catch {}
   await tx(CACHE, 'readwrite', s => s.clear());
+  await tx(OUTBOX, 'readwrite', s => s.clear());
 }
 
 // ---------- recipes ----------
@@ -83,9 +88,13 @@ const byUpdated = list => list.sort((a, b) => b.updatedAt - a.updatedAt);
 
 export async function allRecipes() {
   try {
+    await syncOutbox();
     const { recipes } = await api('/api/recipes');
-    await tx(CACHE, 'readwrite', s => { s.clear(); recipes.forEach(r => s.put(r)); });
-    return byUpdated(recipes);
+    const waiting = await tx(OUTBOX, 'readonly', s => s.getAll()); // still not sent (e.g. failed just now)
+    const list = recipes.filter(r => !waiting.some(w => w.id === r.id));
+    waiting.filter(w => w.op === 'save').forEach(w => list.push({ ...w.data, _pending: true }));
+    await tx(CACHE, 'readwrite', s => { s.clear(); list.forEach(r => s.put(r)); });
+    return byUpdated(list);
   } catch (e) {
     if (e.status !== 0) throw e;
     return byUpdated(await tx(CACHE, 'readonly', s => s.getAll()));
@@ -99,9 +108,21 @@ export async function getRecipe(id) {
 }
 
 export async function saveRecipe(r) {
-  const saved = r.id
-    ? await api(`/api/recipes/${encodeURIComponent(r.id)}`, { method: 'PUT', body: r })
-    : await api('/api/recipes', { method: 'POST', body: r });
+  const { _pending, ...data } = r;
+  let saved;
+  try {
+    saved = data.id
+      ? await api(`/api/recipes/${encodeURIComponent(data.id)}`, { method: 'PUT', body: data })
+      : await api('/api/recipes', { method: 'POST', body: data });
+  } catch (e) {
+    if (e.status !== 0) throw e;
+    // Offline: keep it on the device and send it later
+    const now = Date.now();
+    saved = { ...data, id: data.id || crypto.randomUUID(), createdAt: data.createdAt || now, updatedAt: now };
+    await tx(OUTBOX, 'readwrite', s => s.put({ id: saved.id, op: 'save', data: saved, at: now }));
+    saved = { ...saved, _pending: true };
+    notifyPending();
+  }
   await tx(CACHE, 'readwrite', s => s.put(saved));
   return saved;
 }
@@ -109,9 +130,52 @@ export async function saveRecipe(r) {
 export const saveCached = r => tx(CACHE, 'readwrite', s => s.put(r));
 
 export async function deleteRecipe(id) {
-  await api(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  try {
+    await api(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await tx(OUTBOX, 'readwrite', s => s.delete(id));
+  } catch (e) {
+    if (e.status !== 0) throw e;
+    await tx(OUTBOX, 'readwrite', s => s.put({ id, op: 'delete', at: Date.now() }));
+    notifyPending();
+  }
   await tx(CACHE, 'readwrite', s => s.delete(id));
 }
+
+// ---------- offline outbox ----------
+export const pendingCount = () => tx(OUTBOX, 'readonly', s => s.count());
+const notifyPending = () => pendingCount().then(n => window.dispatchEvent(new CustomEvent('rb-pending', { detail: n }))).catch(() => {});
+let syncing = null;
+
+// Send changes made offline. Stops at the first network error; drops changes the server refuses.
+export function syncOutbox() {
+  syncing ??= (async () => {
+    let sent = 0;
+    try {
+      const items = (await tx(OUTBOX, 'readonly', s => s.getAll())).sort((a, b) => a.at - b.at);
+      for (const item of items) {
+        try {
+          if (item.op === 'delete') await api(`/api/recipes/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+          else {
+            const saved = await api(`/api/recipes/${encodeURIComponent(item.id)}`, { method: 'PUT', body: item.data });
+            await tx(CACHE, 'readwrite', s => s.put(saved));
+          }
+        } catch (e) {
+          if (e.status === 0 || e.status === 401 || e.status === 429) break; // try again later
+          console.warn('Dropped an offline change the server refused:', e.message);
+        }
+        // Remove it unless it was changed again while we were sending
+        await tx(OUTBOX, 'readwrite', s => {
+          const req = s.get(item.id);
+          req.onsuccess = () => { if (req.result && req.result.at === item.at) s.delete(item.id); };
+        });
+        sent++;
+      }
+    } finally { syncing = null; notifyPending(); }
+    return sent;
+  })();
+  return syncing;
+}
+window.addEventListener('online', () => syncOutbox().then(n => n && window.dispatchEvent(new CustomEvent('rb-synced', { detail: n }))));
 
 // Upload a list of recipes (restore from backup). Keeps their ids, so restoring twice doesn't duplicate.
 export async function importAll(list, onProgress) {

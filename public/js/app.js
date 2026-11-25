@@ -1,4 +1,4 @@
-import { allRecipes, getRecipe, saveRecipe, saveCached, deleteRecipe, importAll, api, currentUser, signUp, logIn, logOut, deleteAccount, legacyRecipes, moveLegacyRecipes } from './db.js';
+import { allRecipes, getRecipe, saveRecipe, saveCached, pendingCount, syncOutbox, deleteRecipe, importAll, api, currentUser, signUp, logIn, logOut, deleteAccount, legacyRecipes, moveLegacyRecipes } from './db.js';
 import { parseRecipeText } from './parse-text.js';
 import { t, tn, lang, setLang } from './i18n.js';
 import { $, $$, view, esc, lines, toast, fmtMins, resizeImage, pickFiles, openSheet, download } from './ui.js';
@@ -81,7 +81,7 @@ function card(r) {
   return `<a class="card" href="#/recipe/${r.id}">
     <div class="thumb">${r.image ? `<img src="${esc(r.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span>🍽️</span>'}</div>
     <div class="card-body">
-      <h3>${r.favorite ? '<span class="star">★</span> ' : ''}${esc(r.title)}</h3>
+      <h3>${r.favorite ? '<span class="star">★</span> ' : ''}${esc(r.title)}${r._pending ? ` <span class="pending" title="${t('Waiting to sync')}">⏳</span>` : ''}</h3>
       <p class="muted small">${[tn((r.ingredients || []).length, 'ingredient', 'ingredients'), fmtMins(time)].filter(Boolean).join(' · ')}</p>
     </div></a>`;
 }
@@ -343,7 +343,7 @@ async function renderEdit(id) {
       return;
     }
     draft = null;
-    toast(t('Saved'));
+    toast(saved._pending ? t('Saved on this device. It will sync when you are back online.') : t('Saved'), saved._pending ? 4000 : 2600);
     location.replace(`#/recipe/${saved.id}`);
   };
 }
@@ -698,7 +698,21 @@ async function importFromPhotos(files) {
 }
 
 // Top bar: language switch and labels that depend on the language
+// Offline / waiting-to-sync pill in the top bar
+async function updateNetPill() {
+  const pill = $('#net');
+  let n = 0; try { n = await pendingCount(); } catch {}
+  const offline = navigator.onLine === false;
+  pill.hidden = !user || (!offline && !n);
+  pill.textContent = offline ? (n ? t('Offline · {n} to sync', { n }) : t('Offline')) : t('Syncing {n}…', { n });
+}
+window.addEventListener('online', updateNetPill);
+window.addEventListener('offline', updateNetPill);
+window.addEventListener('rb-pending', updateNetPill);
+window.addEventListener('rb-synced', e => { toast(t('Back online. Your changes are saved.')); updateNetPill(); if (!location.hash.replace(/^#\/?/, '')) route(); });
+
 function renderChrome() {
+  updateNetPill();
   $('#settings-link').hidden = !user;
   const labels = { '': t('Recipes'), plan: t('Meal plan'), shopping: t('Shopping') };
   $$('#tabs a').forEach(a => (a.querySelector('b').textContent = labels[a.dataset.tab]));

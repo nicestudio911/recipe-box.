@@ -202,6 +202,14 @@ const BG = {
   'Download everything we store about you: your account details and all your recipes.': 'Изтеглете всичко, което пазим за вас: данните на профила и всичките ви рецепти.',
   'Download all my data': 'Изтегли всичките ми данни',
 
+  // offline editing
+  'Waiting to sync': 'Чака синхронизация',
+  'Saved on this device. It will sync when you are back online.': 'Запазено на устройството. Ще се синхронизира, когато има интернет.',
+  'Offline · {n} to sync': 'Без интернет · {n} за синхронизиране',
+  'Offline': 'Без интернет',
+  'Syncing {n}…': 'Синхронизиране ({n})…',
+  'Back online. Your changes are saved.': 'Отново онлайн. Промените ви са запазени.',
+
   // share links
   'Send as text': 'Изпрати като текст',
   'The whole recipe in a message': 'Цялата рецепта в съобщение',

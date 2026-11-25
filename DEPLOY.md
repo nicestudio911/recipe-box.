@@ -98,6 +98,21 @@ fly deploy --ha=false
 To restore an older state by hand: `fly ssh console`, then
 `litestream restore -config /app/litestream.yml -timestamp 2026-11-20T10:00:00Z -o /data/restored.db /data/recipes.db`.
 
+## Turn on "Sign in with Google"
+
+1. Open https://console.cloud.google.com, create a project (e.g. "Recipe Box").
+2. **APIs & Services → OAuth consent screen**: choose **External**, fill in the app
+   name, your support email, and add the links to your privacy policy
+   (`https://recipe-box-ivan.fly.dev/privacy.html`) and terms (`/terms.html`). Publish it.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
+   - Application type: **Web application**
+   - Authorized redirect URI: `https://recipe-box-ivan.fly.dev/api/auth/google/callback`
+4. Copy the **Client ID** and **Client secret** into Fly.io → your app → **Secrets** as
+   `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+
+The "Continue with Google" button then appears on the login page. Someone who already
+has an account with the same email lands in that same account.
+
 ## Deploying by hand (optional)
 
 With the Fly.io command line tool installed (https://fly.io/docs/flyctl/install/):

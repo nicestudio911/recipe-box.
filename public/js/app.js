@@ -15,6 +15,7 @@ let user = null;         // logged-in account
 let pendingSharedUrl = null;
 let emailEnabled = false; // server has an email service for verification / reset
 let aiEnabled = false;    // server has AI for imports
+let googleEnabled = false; // "Sign in with Google" is set up
 let verifyBannerClosed = false;
 let units = (() => { try { return localStorage.getItem('rb-units') || ''; } catch { return ''; } })(); // '' | 'metric' | 'us'
 let cookFactor = 1;
@@ -362,10 +363,11 @@ function renderSettings() {
         <button class="${lang === 'en' ? 'on' : ''}" data-lang="en">English</button>
       </div>
 
-      <h2>${t('Change password')}</h2>
+      <h2>${user.hasPassword === false ? t('Set a password') : t('Change password')}</h2>
+      ${user.hasPassword === false ? `<p class="muted small">${t('You sign in with Google. Set a password if you also want to log in with your email.')}</p>` : ''}
       <form class="stack pw-form" autocomplete="on">
         <input type="email" name="username" value="${esc(user.email)}" autocomplete="username" hidden>
-        <label>${t('Current password')}<input name="current" type="password" required autocomplete="current-password"></label>
+        ${user.hasPassword === false ? '' : `<label>${t('Current password')}<input name="current" type="password" required autocomplete="current-password"></label>`}
         <label>${t('New password')}<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="${t('At least 8 characters')}"></label>
         <p class="error" hidden></p>
         <button class="btn">${t('Change password')}</button>
@@ -399,8 +401,9 @@ function renderSettings() {
     const btn = pw.querySelector('button'); const err = pw.querySelector('.error');
     btn.disabled = true; err.hidden = true;
     try {
-      await api('/api/password', { method: 'POST', body: { current: pw.current.value, password: pw.password.value } });
+      await api('/api/password', { method: 'POST', body: { current: pw.current?.value || '', password: pw.password.value } });
       pw.reset(); toast(t('Password changed. Other devices were logged out.'), 4000);
+      if (user.hasPassword === false) { user.hasPassword = true; renderSettings(); }
     } catch (ex) { err.textContent = ex.message; err.hidden = false; }
     btn.disabled = false;
   };
@@ -426,7 +429,13 @@ function renderSettings() {
   };
 }
 
-function renderAuth(mode = 'login') {
+const LOGIN_ERRORS = {
+  google: 'Signing in with Google did not work. Please try again.',
+  state: 'That sign-in took too long or was opened in another browser. Please try again.',
+  linked: 'This email is already linked to a different Google account.',
+  limit: 'Too many attempts. Please wait 15 minutes and try again.',
+};
+function renderAuth(mode = 'login', error = '') {
   const signup = mode === 'signup';
   $('#fab').hidden = true; $('#back').hidden = true; $('#settings-link').hidden = true;
   view.innerHTML = `
@@ -436,6 +445,8 @@ function renderAuth(mode = 'login') {
         <h1>${signup ? t('Create your recipe box') : t('Welcome back')}</h1>
         <p class="muted">${t('Save your recipes, snap them from a cookbook with your camera, or import them from any recipe website. They follow you to every device.')}</p>
       </div>
+      ${googleEnabled ? `<a class="btn google-btn" href="/api/auth/google"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>${t('Continue with Google')}</a>
+      <p class="or"><span>${t('or with email')}</span></p>` : ''}
       <form class="stack" autocomplete="on">
         ${signup ? `<label>${t('Your name')}<input name="name" autocomplete="name" placeholder="${t('Optional')}"></label>` : ''}
         <label>${t('Email')}<input name="email" type="email" required autocomplete="email" inputmode="email"></label>
@@ -448,6 +459,7 @@ function renderAuth(mode = 'login') {
         <a href="#" data-switch>${signup ? t('Log in') : t('Create an account')}</a></p>
       <p class="center small muted legal-links"><a href="/privacy.html">${t('Privacy policy')}</a> · <a href="/terms.html">${t('Terms of use')}</a></p>
     </div>`;
+  if (error) { const el = $('.auth .error'); el.textContent = t(LOGIN_ERRORS[error] || LOGIN_ERRORS.google); el.hidden = false; }
   $('[data-switch]').onclick = e => { e.preventDefault(); renderAuth(signup ? 'login' : 'signup'); };
   const forgot = $('[data-forgot]');
   if (forgot) forgot.onclick = e => { e.preventDefault(); renderForgot($('.auth [name=email]').value); };
@@ -736,6 +748,7 @@ async function route() {
   window.scrollTo(0, 0);
   if (page === 'verify') return renderVerify(id);
   if (page === 'reset') return renderReset(id);
+  if (page === 'login-error') { history.replaceState(null, '', '/#/'); return user ? renderList() : renderAuth('login', id); }
   if (!user) return renderAuth();
   if (!page) return renderList();
   if (page === 'recipe') return renderRecipe(id);
@@ -762,7 +775,7 @@ if (sharedUrl) history.replaceState(null, '', '/#/');
 
 (async () => {
   try { user = await currentUser(); } catch { user = null; }
-  try { ({ emailEnabled, aiEnabled } = await api('/api/config')); } catch { /* offline */ }
+  try { ({ emailEnabled, aiEnabled, googleEnabled } = await api('/api/config')); } catch { /* offline */ }
   renderChrome();
   await savePendingShare();
   await route();

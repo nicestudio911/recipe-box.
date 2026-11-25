@@ -202,6 +202,15 @@ const BG = {
   'Download everything we store about you: your account details and all your recipes.': 'Изтеглете всичко, което пазим за вас: данните на профила и всичките ви рецепти.',
   'Download all my data': 'Изтегли всичките ми данни',
 
+  // Google sign-in
+  'Continue with Google': 'Продължи с Google',
+  'or with email': 'или с имейл',
+  'Signing in with Google did not work. Please try again.': 'Влизането с Google не успя. Опитайте отново.',
+  'That sign-in took too long or was opened in another browser. Please try again.': 'Влизането отне твърде дълго или беше отворено в друг браузър. Опитайте отново.',
+  'This email is already linked to a different Google account.': 'Този имейл вече е свързан с друг профил в Google.',
+  'Set a password': 'Задайте парола',
+  'You sign in with Google. Set a password if you also want to log in with your email.': 'Влизате с Google. Задайте парола, ако искате да влизате и с имейла си.',
+
   // offline editing
   'Waiting to sync': 'Чака синхронизация',
   'Saved on this device. It will sync when you are back online.': 'Запазено на устройството. Ще се синхронизира, когато има интернет.',

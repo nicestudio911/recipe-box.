@@ -4,6 +4,9 @@ import { t, tn, lang, setLang } from './i18n.js';
 import { $, $$, view, esc, lines, toast, fmtMins, resizeImage, pickFiles, openSheet, download } from './ui.js';
 import { renderShopping, offerToShopping } from './shopping.js';
 import { renderPlan, addToPlan } from './planner.js';
+import { renderCook } from './cook.js';
+import { stepHtml } from './timers.js';
+import { convertLine, convertTemps } from './units.js';
 
 let draft = null;        // recipe being created from an import, before it's saved
 let listQuery = '';
@@ -13,6 +16,8 @@ let pendingSharedUrl = null;
 let emailEnabled = false; // server has an email service for verification / reset
 let aiEnabled = false;    // server has AI for imports
 let verifyBannerClosed = false;
+let units = (() => { try { return localStorage.getItem('rb-units') || ''; } catch { return ''; } })(); // '' | 'metric' | 'us'
+let cookFactor = 1;
 
 // Scale numbers at the start of an ingredient line ("1 1/2 cups" x2 -> "3 cups")
 const FRAC = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125 };
@@ -88,7 +93,7 @@ async function renderRecipe(id) {
   const baseServings = parseFloat(String(r.servings).match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(',', '.')) || null;
 
   const draw = () => {
-    const ing = (r.ingredients || []).map(l => scaleLine(l, factor));
+    const ing = (r.ingredients || []).map(l => convertLine(scaleLine(l, factor), units));
     view.innerHTML = `
       <article class="recipe">
         ${r.image ? `<img class="hero" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer">` : ''}
@@ -116,6 +121,11 @@ async function renderRecipe(id) {
             <div class="scaler" aria-label="${t('Scale recipe')}">
               ${[0.5, 1, 2, 3].map(f => `<button class="${f === factor ? 'on' : ''}" data-scale="${f}">${f === 0.5 ? '½' : f}×</button>`).join('')}
             </div>
+            <select class="units" aria-label="${t('Units')}">
+              <option value="">${t('Original units')}</option>
+              <option value="metric" ${units === 'metric' ? 'selected' : ''}>${t('Metric (g, ml)')}</option>
+              <option value="us" ${units === 'us' ? 'selected' : ''}>${t('US (cups, oz)')}</option>
+            </select>
           </div>
           <ul class="ingredients">${ing.map((l, i) => l.startsWith('## ') ? `<li class="sub">${esc(l.slice(3))}</li>` :
             `<li><label><input type="checkbox" data-i="${i}"><span>${esc(l)}</span></label></li>`).join('')}</ul>
@@ -123,7 +133,7 @@ async function renderRecipe(id) {
 
         ${(r.steps || []).length ? `<section>
           <h2>${t('Steps')}</h2>
-          <ol class="steps">${r.steps.map(s => s.startsWith('## ') ? `<li class="sub">${esc(s.slice(3))}</li>` : `<li>${esc(s)}</li>`).join('')}</ol>
+          <ol class="steps">${r.steps.map(s => s.startsWith('## ') ? `<li class="sub">${esc(s.slice(3))}</li>` : `<li>${stepHtml(convertTemps(s, units), r.title)}</li>`).join('')}</ol>
         </section>` : ''}
 
         ${r.notes ? `<section><h2>${t('Notes')}</h2><p class="notes">${esc(r.notes)}</p></section>` : ''}
@@ -138,6 +148,7 @@ async function renderRecipe(id) {
       </article>`;
 
     view.querySelectorAll('[data-scale]').forEach(b => (b.onclick = () => { factor = +b.dataset.scale; draw(); }));
+    $('select.units').onchange = e => { units = e.target.value; try { localStorage.setItem('rb-units', units); } catch {} draw(); };
     view.querySelectorAll('.steps li:not(.sub)').forEach(li => (li.onclick = () => li.classList.toggle('done')));
     $('[data-action=fav]').onclick = async () => {
       try { Object.assign(r, await saveRecipe({ ...r, favorite: !r.favorite })); draw(); } catch (e) { toast(e.message); }
@@ -147,7 +158,7 @@ async function renderRecipe(id) {
       try { await deleteRecipe(r.id); toast(t('Recipe deleted')); location.hash = '#/'; } catch (e) { toast(e.message); }
     };
     $('[data-action=share]').onclick = () => shareRecipe(r);
-    $('[data-action=cook]').onclick = e => toggleCooking(e.currentTarget);
+    $('[data-action=cook]').onclick = () => { cookFactor = factor; location.hash = `#/cook/${r.id}`; };
     $('[data-action=shop]').onclick = () => offerToShopping([{ title: r.title, lines: (r.ingredients || []).map(l => scaleLine(l, factor)) }]);
     $('[data-action=plan]').onclick = () => addToPlan(r);
     $('[data-action=coll]').onclick = () => editCollections(r, saved => { Object.assign(r, saved); draw(); });
@@ -173,18 +184,6 @@ async function editCollections(r, onSaved) {
       try { onSaved(await saveRecipe({ ...r, collections })); close(); toast(t('Saved')); } catch (ex) { toast(ex.message); }
     };
   });
-}
-
-let wakeLock = null;
-async function toggleCooking(btn) {
-  document.body.classList.toggle('cooking');
-  const on = document.body.classList.contains('cooking');
-  btn.textContent = on ? t('Exit cooking mode') : t('👩‍🍳 Cooking mode');
-  try {
-    if (on && 'wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-    else { await wakeLock?.release(); wakeLock = null; }
-  } catch { /* not supported: fine */ }
-  if (on) toast(t('Bigger text, and the screen stays on'));
 }
 
 async function shareRecipe(r) {
@@ -629,7 +628,7 @@ async function route() {
   document.body.classList.remove('cooking');
   $('#fab').hidden = !!page;
   $('#back').hidden = !page || page === 'plan' || page === 'shopping';
-  const tabs = !!user && !['edit', 'new', 'verify', 'reset'].includes(page);
+  const tabs = !!user && !['edit', 'new', 'verify', 'reset', 'cook'].includes(page);
   $('#tabs').hidden = !tabs;
   document.body.classList.toggle('has-tabs', tabs);
   $$('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === (page === 'recipe' ? '' : page || '')));
@@ -643,6 +642,7 @@ async function route() {
   if (page === 'new') return renderEdit(null);
   if (page === 'settings') return renderSettings();
   if (page === 'plan') return renderPlan();
+  if (page === 'cook') return renderCook(id, { transform: l => convertLine(scaleLine(l, cookFactor), units), stepTransform: s => convertTemps(s, units) });
   if (page === 'shopping') return renderShopping();
   location.hash = '#/';
 }

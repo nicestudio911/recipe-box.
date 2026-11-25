@@ -202,6 +202,22 @@ const BG = {
   'Download everything we store about you: your account details and all your recipes.': 'Изтеглете всичко, което пазим за вас: данните на профила и всичките ви рецепти.',
   'Download all my data': 'Изтегли всичките ми данни',
 
+  // units, timers, cooking
+  'Units': 'Мерни единици',
+  'Original units': 'Оригинални мерки',
+  'Metric (g, ml)': 'Метрични (г, мл)',
+  'US (cups, oz)': 'Американски (cups, oz)',
+  '⏰ Time is up': '⏰ Времето изтече',
+  '⏰ Done!': '⏰ Готово!',
+  'Add a minute': 'Добави минута',
+  'Stop timer': 'Спри таймера',
+  'This recipe has no steps. Open the ingredients to tick them off.': 'Тази рецепта няма стъпки. Отворете продуктите, за да ги отметнете.',
+  'Enjoy your meal!': 'Добър апетит!',
+  'Step {i} of {n}': 'Стъпка {i} от {n}',
+  'Finish': 'Край',
+  'Done': 'Готово',
+  'Next': 'Напред',
+
   // shopping list, meal plan, collections
   'Recipes': 'Рецепти',
   'Meal plan': 'Меню',

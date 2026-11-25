@@ -1,4 +1,7 @@
+FROM litestream/litestream:0.3.13 AS litestream
+
 FROM node:22-slim
+COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 WORKDIR /app
 ENV NODE_ENV=production DATA_DIR=/data TRUST_PROXY=1 PORT=3000
 COPY package.json package-lock.json ./

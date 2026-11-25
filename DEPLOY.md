@@ -67,6 +67,37 @@ Fly.io restarts the app with the new secrets, and the email features appear.
 Each social media import then costs roughly 2–4 US cents. Without the key, social
 imports still work for captions that are written as a clear list.
 
+## Turn on error alerts
+
+Once emails work (see above), add one more secret in Fly.io → your app → **Secrets**:
+
+- `ALERT_EMAIL` = the address that should get an email when something breaks
+
+You then get an email when the server hits an error, when an AI import fails, or
+when the app crashes in someone's browser. The same error is emailed at most once
+an hour and at most 20 emails a day. Errors are always visible in the Fly.io
+dashboard → your app → **Logs**, even without this.
+
+## Turn on backups
+
+Every change to the database is copied within seconds to a private storage bucket
+(Tigris, built into Fly.io, free up to 5 GB), using Litestream. If the disk is ever
+lost, the app restores the latest copy by itself when it starts.
+
+Easiest: on GitHub open **Actions → Turn on backups → Run workflow**. It creates the
+bucket and restarts the app. The log line `Backups: on` means it worked.
+
+If that fails because the Fly.io token can't create storage, do it once by hand with
+the Fly.io command line tool:
+
+```bash
+fly storage create --app recipe-box-ivan --name recipe-box-ivan-backups
+fly deploy --ha=false
+```
+
+To restore an older state by hand: `fly ssh console`, then
+`litestream restore -config /app/litestream.yml -timestamp 2026-11-20T10:00:00Z -o /data/restored.db /data/recipes.db`.
+
 ## Deploying by hand (optional)
 
 With the Fly.io command line tool installed (https://fly.io/docs/flyctl/install/):

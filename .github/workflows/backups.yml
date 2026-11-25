@@ -1,0 +1,35 @@
+name: Turn on backups
+
+# Run once by hand (Actions → Turn on backups → Run workflow).
+# Creates a private Tigris storage bucket on your Fly.io account and connects it to the app.
+# Tigris is free up to 5 GB, which is far more than Recipe Box needs.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  backups:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Create the backup bucket (skipped if the app already has one)
+        run: |
+          APP=$(grep -E '^app *=' fly.toml | sed -E 's/^app *= *"([^"]+)".*/\1/')
+          if flyctl secrets list -a "$APP" | grep -q BUCKET_NAME; then
+            echo "Backups are already set up for $APP."
+          else
+            flyctl storage create --app "$APP" --name "$APP-backups" --yes
+          fi
+          echo "APP=$APP" >> "$GITHUB_ENV"
+      - name: Restart the app with backups on
+        run: flyctl deploy --remote-only --ha=false -a "$APP"
+      - name: Check
+        run: |
+          sleep 20
+          flyctl logs -a "$APP" --no-tail | grep -E "Backups: (on|off)" | tail -1 || true

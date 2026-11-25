@@ -1,0 +1,14 @@
+# Off-site backups of the database with Litestream (https://litestream.io).
+# Every change is copied to an S3-compatible bucket within seconds, so the
+# recipes survive even if the Fly.io disk is lost.
+# start.sh switches this on only when BUCKET_NAME is set (see DEPLOY.md, "Backups").
+dbs:
+  - path: ${DATA_DIR}/recipes.db
+    replicas:
+      - type: s3
+        bucket: ${BUCKET_NAME}
+        path: recipes.db
+        endpoint: ${AWS_ENDPOINT_URL_S3}
+        region: ${AWS_REGION}
+        retention: 720h            # keep 30 days of history (matches the privacy policy)
+        snapshot-interval: 24h

@@ -1,5 +1,5 @@
 // Offline support: keep the app shell cached; recipes live in IndexedDB.
-const CACHE = 'recipe-box-v6';
+const CACHE = 'recipe-box-v7';
 const SHELL = ['/', '/index.html', '/css/styles.css', '/js/app.js', '/js/db.js', '/js/parse-text.js', '/js/i18n.js', '/js/ui.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/privacy.html', '/terms.html', '/css/legal.css', '/js/legal.js'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });

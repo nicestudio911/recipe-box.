@@ -530,6 +530,24 @@ async function importFromPhotos(files) {
   try {
     const images = await Promise.all(files.map(f => resizeImage(f, 2200, 0.9)));
     panel.querySelector('.ocr-thumbs').innerHTML = images.map(src => `<img src="${src}" alt="">`).join('');
+    if (aiEnabled && navigator.onLine !== false) {
+      // Best quality: Claude reads the photos (handwriting too). Falls back to on-device reading if that fails.
+      status(t('Reading the recipe with AI… (can take up to 30 seconds)'));
+      panel.querySelector('.progress').classList.add('busy');
+      try {
+        const small = await Promise.all(files.slice(0, 4).map(f => resizeImage(f, 1600, 0.85)));
+        const data = await api('/api/import/photo', { method: 'POST', body: { images: small } });
+        if (cancelled) return;
+        draft = { ...data, image: await resizeImage(files[0]), _from: 'photo' };
+        close(); location.hash = '#/new';
+        return;
+      } catch (e) {
+        if (cancelled) return;
+        if (e.status === 422) throw e; // the AI looked and found no recipe: on-device reading won't do better
+        toast(t('AI reading did not work, reading on this device instead.'), 3500);
+        panel.querySelector('.progress').classList.remove('busy');
+      }
+    }
     status(t('Loading text recognition (first time takes a little longer)…'));
     const Tesseract = await loadTesseract();
     let current = 0;

@@ -201,6 +201,13 @@ const BG = {
   'Your data and privacy': 'Вашите данни и поверителност',
   'Download everything we store about you: your account details and all your recipes.': 'Изтеглете всичко, което пазим за вас: данните на профила и всичките ви рецепти.',
   'Download all my data': 'Изтегли всичките ми данни',
+  'Reading the recipe with AI… (can take up to 30 seconds)': 'Изкуственият интелект чете рецептата… (може да отнеме до 30 секунди)',
+  'AI reading did not work, reading on this device instead.': 'Четенето с ИИ не успя, четем на устройството.',
+  'No recipe found in that photo.': 'На снимката не е открита рецепта.',
+  'AI reading is not available.': 'Четенето с ИИ не е налично.',
+  'AI reading failed': 'Четенето с ИИ не успя',
+  'No photo received': 'Не е получена снимка',
+  "You have reached today's limit for AI imports. Please try again tomorrow.": 'Достигнахте дневния лимит за импорт с ИИ. Опитайте отново утре.',
 
   // server / API messages
   'You are offline. Connect to the internet and try again.': 'Няма връзка с интернет. Свържете се и опитайте отново.',

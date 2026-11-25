@@ -58,3 +58,29 @@ test('cross-site and non-JSON writes are refused', async () => {
 test('link import needs login', async () => {
   assert.equal((await client()('/api/import?url=https://example.com')).status, 401);
 });
+
+test('shopping list and meal plan are saved per user and cleaned', async () => {
+  const a = client(), b = client();
+  await a('/api/signup', { method: 'POST', body: { email: 'lists@example.com', password: 'longenough1' } });
+  await b('/api/signup', { method: 'POST', body: { email: 'lists2@example.com', password: 'longenough1' } });
+  assert.deepEqual((await a('/api/lists/shopping')).data.items, []);
+  const s = await a('/api/lists/shopping', { method: 'PUT', body: { items: [{ id: 'x1', text: ' 2 яйца ', done: true, recipe: 'Баница' }, { text: '' }, { text: 5 }, { text: 'мляко' }] } });
+  assert.equal(s.status, 200);
+  assert.equal(s.data.items.length, 2);
+  assert.deepEqual(s.data.items[0], { id: 'x1', text: '2 яйца', done: true, recipe: 'Баница' });
+  assert.ok(s.data.updatedAt > 0);
+  assert.equal((await a('/api/lists/shopping')).data.items[1].text, 'мляко');
+  assert.deepEqual((await b('/api/lists/shopping')).data.items, [], 'other users see their own list');
+
+  const p = await a('/api/lists/plan', { method: 'PUT', body: { days: { '2026-11-25': [{ recipeId: 'r1' }, { text: 'Leftovers' }, {}], 'bad': [{ text: 'x' }], '2026-11-26': [] } } });
+  assert.deepEqual(Object.keys(p.data.days), ['2026-11-25']);
+  assert.equal(p.data.days['2026-11-25'].length, 2);
+  assert.equal((await a('/api/lists/other')).status, 404);
+});
+
+test('recipes keep their collections', async () => {
+  const a = client();
+  await a('/api/signup', { method: 'POST', body: { email: 'coll@example.com', password: 'longenough1' } });
+  const r = await a('/api/recipes', { method: 'POST', body: { title: 'Таратор', collections: ['Summer', ' Summer ', 'Quick', 7, ''] } });
+  assert.deepEqual(r.data.collections, ['Summer', 'Quick']);
+});

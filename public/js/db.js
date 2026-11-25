@@ -74,7 +74,7 @@ export async function deleteAccount() {
   await clearCache();
 }
 async function clearCache() {
-  try { localStorage.removeItem('rb-user'); } catch {}
+  try { localStorage.removeItem('rb-user'); LIST_KEYS.forEach(k => localStorage.removeItem(LIST_PREFIX + k)); } catch {}
   await tx(CACHE, 'readwrite', s => s.clear());
 }
 
@@ -131,3 +131,46 @@ export async function moveLegacyRecipes() {
   await tx(LEGACY, 'readwrite', s => s.clear());
   return n;
 }
+
+// ---------- shopping list and meal plan ----------
+// Saved on the device first, then sent to the server, so they work offline and sync later.
+const LIST_KEYS = ['shopping', 'plan'];
+const LIST_PREFIX = 'rb-list-';
+const EMPTY = { shopping: () => ({ items: [] }), plan: () => ({ days: {} }) };
+const readLocal = key => { try { return JSON.parse(localStorage.getItem(LIST_PREFIX + key)); } catch { return null; } };
+const writeLocal = (key, v) => { try { localStorage.setItem(LIST_PREFIX + key, JSON.stringify(v)); } catch {} };
+const pushTimers = {};
+
+async function pushList(key) {
+  const local = readLocal(key);
+  if (!local?.dirty) return local?.data;
+  const sent = JSON.stringify(local.data);
+  const saved = await api(`/api/lists/${key}`, { method: 'PUT', body: local.data });
+  // Only mark as synced if nothing changed on the device while we were sending
+  if (JSON.stringify(readLocal(key)?.data) === sent) writeLocal(key, { data: saved });
+  return saved;
+}
+
+export async function getList(key) {
+  const local = readLocal(key);
+  if (local?.dirty) { try { return await pushList(key); } catch { return local.data; } }
+  try {
+    const data = await api(`/api/lists/${key}`);
+    writeLocal(key, { data });
+    return data;
+  } catch (e) {
+    if (e.status !== 0 && e.status !== 401) throw e;
+    return local?.data || EMPTY[key]();
+  }
+}
+
+export function saveList(key, data) {
+  writeLocal(key, { data, dirty: true });
+  clearTimeout(pushTimers[key]);
+  pushTimers[key] = setTimeout(() => pushList(key).catch(() => {}), 600);
+  return data;
+}
+
+export const syncLists = () => Promise.all(LIST_KEYS.map(k => pushList(k).catch(() => {})));
+window.addEventListener('online', syncLists);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') syncLists(); });

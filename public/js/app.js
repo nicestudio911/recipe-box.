@@ -2,6 +2,8 @@ import { allRecipes, getRecipe, saveRecipe, deleteRecipe, importAll, api, curren
 import { parseRecipeText } from './parse-text.js';
 import { t, tn, lang, setLang } from './i18n.js';
 import { $, $$, view, esc, lines, toast, fmtMins, resizeImage, pickFiles, openSheet, download } from './ui.js';
+import { renderShopping, offerToShopping } from './shopping.js';
+import { renderPlan, addToPlan } from './planner.js';
 
 let draft = null;        // recipe being created from an import, before it's saved
 let listQuery = '';
@@ -32,9 +34,10 @@ function scaleLine(line, f) {
 async function renderList() {
   const recipes = await allRecipes();
   const tags = [...new Set(recipes.flatMap(r => r.tags || []))].sort();
+  const collections = [...new Set(recipes.flatMap(r => r.collections || []))].sort();
   const q = listQuery.toLowerCase();
   const shown = recipes.filter(r =>
-    (!listTag || (listTag === '★' ? r.favorite : (r.tags || []).includes(listTag))) &&
+    (!listTag || (listTag === '★' ? r.favorite : listTag.startsWith('c:') ? (r.collections || []).includes(listTag.slice(2)) : (r.tags || []).includes(listTag))) &&
     (!q || [r.title, ...(r.ingredients || []), ...(r.tags || [])].join(' ').toLowerCase().includes(q)));
 
   view.innerHTML = `
@@ -46,6 +49,7 @@ async function renderList() {
     ${recipes.length ? `<div class="chips">
       <button class="chip ${!listTag ? 'on' : ''}" data-tag="">${t('All')}</button>
       <button class="chip ${listTag === '★' ? 'on' : ''}" data-tag="★">${t('★ Favourites')}</button>
+      ${collections.map(c => `<button class="chip coll ${listTag === `c:${c}` ? 'on' : ''}" data-tag="c:${esc(c)}">📁 ${esc(c)}</button>`).join('')}
       ${tags.map(t => `<button class="chip ${listTag === t ? 'on' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}
     </div>` : ''}
     ${!recipes.length ? `
@@ -99,7 +103,12 @@ async function renderRecipe(id) {
           ${r.cookTime ? `<span>${t('Cook {t}', { t: fmtMins(r.cookTime) })}</span>` : ''}
           ${r.totalTime ? `<span>⏱ ${fmtMins(r.totalTime)}</span>` : ''}
         </div>
-        ${(r.tags || []).length ? `<div class="chips static">${r.tags.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
+        ${(r.tags || []).length || (r.collections || []).length ? `<div class="chips static">${(r.collections || []).map(c => `<a class="chip coll" href="#/" data-coll="${esc(c)}">📁 ${esc(c)}</a>`).join('')}${(r.tags || []).map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
+        <div class="quick-actions">
+          <button class="btn small" data-action="shop">🛒 ${t('Shopping list')}</button>
+          <button class="btn small" data-action="plan">📅 ${t('Meal plan')}</button>
+          <button class="btn small" data-action="coll">📁 ${t('Collections')}</button>
+        </div>
 
         <section>
           <div class="section-head">
@@ -139,8 +148,31 @@ async function renderRecipe(id) {
     };
     $('[data-action=share]').onclick = () => shareRecipe(r);
     $('[data-action=cook]').onclick = e => toggleCooking(e.currentTarget);
+    $('[data-action=shop]').onclick = () => offerToShopping([{ title: r.title, lines: (r.ingredients || []).map(l => scaleLine(l, factor)) }]);
+    $('[data-action=plan]').onclick = () => addToPlan(r);
+    $('[data-action=coll]').onclick = () => editCollections(r, saved => { Object.assign(r, saved); draw(); });
+    $$('[data-coll]').forEach(a => (a.onclick = () => { listTag = `c:${a.dataset.coll}`; listQuery = ''; }));
   };
   draw();
+}
+
+// Put a recipe into your own collections ("Christmas", "Quick dinners"...)
+async function editCollections(r, onSaved) {
+  const all = [...new Set([...(await allRecipes()).flatMap(x => x.collections || []), ...(r.collections || [])])].sort();
+  openSheet(`
+    <h2>${t('Collections')}</h2>
+    <p class="muted small">${esc(r.title)}</p>
+    <form class="stack">
+      ${all.length ? `<div class="pick-list">${all.map(c => `<label><input type="checkbox" value="${esc(c)}" ${(r.collections || []).includes(c) ? 'checked' : ''}><span>📁 ${esc(c)}</span></label>`).join('')}</div>` : `<p class="muted small">${t('Collections group recipes your way, for example “Christmas” or “Quick dinners”.')}</p>`}
+      <input name="name" maxlength="60" placeholder="${t('New collection, e.g. Quick dinners')}" autocomplete="off">
+      <button class="btn primary">${t('Save')}</button>
+    </form>`, (panel, close) => {
+    panel.querySelector('form').onsubmit = async e => {
+      e.preventDefault();
+      const collections = [...$$('input[type=checkbox]:checked', panel).map(i => i.value), e.target.name.value.trim()].filter(Boolean);
+      try { onSaved(await saveRecipe({ ...r, collections })); close(); toast(t('Saved')); } catch (ex) { toast(ex.message); }
+    };
+  });
 }
 
 let wakeLock = null;
@@ -582,6 +614,9 @@ async function importFromPhotos(files) {
 // Top bar: language switch and labels that depend on the language
 function renderChrome() {
   $('#settings-link').hidden = !user;
+  const labels = { '': t('Recipes'), plan: t('Meal plan'), shopping: t('Shopping') };
+  $$('#tabs a').forEach(a => (a.querySelector('b').textContent = labels[a.dataset.tab]));
+  $('#fab').setAttribute('aria-label', t('Add a recipe'));
   $('#back').setAttribute('aria-label', t('Back'));
   const lb = $('#lang-btn');
   lb.textContent = lang === 'bg' ? 'EN' : 'БГ';
@@ -593,7 +628,11 @@ async function route() {
   const [, page, id] = location.hash.replace(/^#\/?/, '/').split('/');
   document.body.classList.remove('cooking');
   $('#fab').hidden = !!page;
-  $('#back').hidden = !page;
+  $('#back').hidden = !page || page === 'plan' || page === 'shopping';
+  const tabs = !!user && !['edit', 'new', 'verify', 'reset'].includes(page);
+  $('#tabs').hidden = !tabs;
+  document.body.classList.toggle('has-tabs', tabs);
+  $$('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.tab === (page === 'recipe' ? '' : page || '')));
   window.scrollTo(0, 0);
   if (page === 'verify') return renderVerify(id);
   if (page === 'reset') return renderReset(id);
@@ -603,6 +642,8 @@ async function route() {
   if (page === 'edit') return renderEdit(id);
   if (page === 'new') return renderEdit(null);
   if (page === 'settings') return renderSettings();
+  if (page === 'plan') return renderPlan();
+  if (page === 'shopping') return renderShopping();
   location.hash = '#/';
 }
 

@@ -84,3 +84,43 @@ test('recipes keep their collections', async () => {
   const r = await a('/api/recipes', { method: 'POST', body: { title: 'Таратор', collections: ['Summer', ' Summer ', 'Quick', 7, ''] } });
   assert.deepEqual(r.data.collections, ['Summer', 'Quick']);
 });
+
+test('share link: public view, save a copy, stop sharing', async () => {
+  // Own server: the sign-up limit per IP is shared with the tests above
+  const srv = createApp({ dataDir: ':memory:' });
+  await new Promise(r => srv.listen(0, r));
+  const base = `http://localhost:${srv.address().port}`;
+  const mk = () => { let cookie = ''; return async (path, { method = 'GET', body } = {}) => {
+    const res = await fetch(base + path, { method, headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) }, body: body && JSON.stringify(body) });
+    const sc = res.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
+    return { status: res.status, data: await res.json().catch(() => null) };
+  }; };
+  const a = mk(), b = mk(), anon = mk();
+  await a('/api/signup', { method: 'POST', body: { email: 'sharer@example.com', password: 'longenough1' } });
+  await b('/api/signup', { method: 'POST', body: { email: 'saver@example.com', password: 'longenough1' } });
+  const rec = (await a('/api/recipes', { method: 'POST', body: { title: 'Козунак <b>', ingredients: ['1 кг брашно'], favorite: true, collections: ['Великден'] } })).data;
+  assert.equal((await a(`/api/recipes/${rec.id}/share`)).data.url, null);
+  const { url } = (await a(`/api/recipes/${rec.id}/share`, { method: 'POST', body: {} })).data;
+  assert.match(url, /\/s\/[\w-]{16}$/);
+  assert.equal((await a(`/api/recipes/${rec.id}/share`, { method: 'POST', body: {} })).data.url, url, 'same link twice');
+  assert.equal((await b(`/api/recipes/${rec.id}/share`, { method: 'POST', body: {} })).status, 404, "can't share others' recipes");
+  const token = url.split('/s/')[1];
+
+  const pub = await anon(`/api/shared/${token}`);
+  assert.equal(pub.data.title, 'Козунак <b>');
+  assert.equal(pub.data.favorite, undefined); assert.equal(pub.data.collections, undefined);
+  const page = await fetch(`${base}/s/${token}`, { headers: { 'accept-language': 'bg-BG' } });
+  const html = await page.text();
+  assert.equal(page.status, 200);
+  assert.match(html, /Козунак &lt;b&gt;/); assert.match(html, /og:title/); assert.match(html, /Продукти/);
+
+  assert.equal((await anon(`/api/shared/${token}/save`, { method: 'POST', body: {} })).status, 401);
+  const copy = await b(`/api/shared/${token}/save`, { method: 'POST', body: {} });
+  assert.equal(copy.status, 200); assert.notEqual(copy.data.id, rec.id);
+  assert.equal((await b('/api/recipes')).data.recipes.length, 1);
+
+  await a(`/api/recipes/${rec.id}/share`, { method: 'DELETE' });
+  assert.equal((await anon(`/api/shared/${token}`)).status, 404);
+  assert.equal((await fetch(`${base}/s/${token}`)).status, 404);
+  srv.close();
+});

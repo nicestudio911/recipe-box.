@@ -202,6 +202,21 @@ const BG = {
   'Download everything we store about you: your account details and all your recipes.': 'Изтеглете всичко, което пазим за вас: данните на профила и всичките ви рецепти.',
   'Download all my data': 'Изтегли всичките ми данни',
 
+  // share links
+  'Send as text': 'Изпрати като текст',
+  'The whole recipe in a message': 'Цялата рецепта в съобщение',
+  'Share a link': 'Сподели връзка',
+  'Anyone with the link can view it and save it to their Recipe Box': 'Всеки с връзката може да я види и да я запази в своя Recipe Box',
+  'Anyone with this link can view this recipe.': 'Всеки с тази връзка може да види рецептата.',
+  'Link': 'Връзка',
+  'Send link': 'Изпрати връзката',
+  'Copy link': 'Копирай връзката',
+  'Stop sharing': 'Спри споделянето',
+  'Link copied': 'Връзката е копирана',
+  'The link no longer works': 'Връзката вече не работи',
+  'Saved “{title}” to your recipes': '„{title}“ е запазена в рецептите ви',
+  'This share link no longer works.': 'Тази връзка за споделяне вече не работи.',
+
   // nutrition
   'Nutrition': 'Хранителни стойности',
   'per serving': 'на порция',

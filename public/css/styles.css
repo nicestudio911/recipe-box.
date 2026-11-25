@@ -245,3 +245,10 @@ body.cooking .cook { padding-bottom: 70px; }
 .nutrition tr:last-child td { border-bottom: 0; }
 .nutrition tr.sub td:first-child { padding-left: 28px; color: var(--muted); font-size: .92rem; }
 .section-head + .ingredients, .section-head + ul { margin-top: 10px; }
+
+/* share links */
+.share-link input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; }
+.share-link .actions { margin-top: 12px; }
+.shared-recipe h1 { margin-top: 4px; }
+.share-cta { margin: 12px 0 4px; }
+.share-foot { margin-top: 32px; border-top: 1px solid var(--line); padding-top: 12px; }

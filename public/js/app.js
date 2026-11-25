@@ -225,6 +225,40 @@ async function editCollections(r, onSaved) {
 }
 
 async function shareRecipe(r) {
+  openSheet(`
+    <h2>${t('Share')}</h2>
+    <div class="add-options">
+      <button data-a="text"><span>💬</span><b>${t('Send as text')}</b><small>${t('The whole recipe in a message')}</small></button>
+      <button data-a="link"><span>🔗</span><b>${t('Share a link')}</b><small>${t('Anyone with the link can view it and save it to their Recipe Box')}</small></button>
+    </div>
+    <div class="share-link" hidden></div>`, (panel, close) => {
+    panel.querySelector('[data-a=text]').onclick = () => { close(); shareAsText(r); };
+    panel.querySelector('[data-a=link]').onclick = async () => {
+      const box = panel.querySelector('.share-link');
+      try {
+        const { url } = await api(`/api/recipes/${encodeURIComponent(r.id)}/share`, { method: 'POST', body: {} });
+        panel.querySelector('.add-options').hidden = true;
+        box.hidden = false;
+        box.innerHTML = `<p class="muted small">${t('Anyone with this link can view this recipe.')}</p>
+          <input readonly value="${esc(url)}" aria-label="${t('Link')}">
+          <div class="actions">
+            <button class="btn primary" data-a="send">${navigator.share ? t('Send link') : t('Copy link')}</button>
+            <button class="btn danger" data-a="stop">${t('Stop sharing')}</button>
+          </div>`;
+        box.querySelector('input').onclick = e => e.target.select();
+        box.querySelector('[data-a=send]').onclick = async () => {
+          if (navigator.share) { try { await navigator.share({ title: r.title, url }); } catch {} return; }
+          try { await navigator.clipboard.writeText(url); toast(t('Link copied')); } catch { box.querySelector('input').select(); }
+        };
+        box.querySelector('[data-a=stop]').onclick = async () => {
+          try { await api(`/api/recipes/${encodeURIComponent(r.id)}/share`, { method: 'DELETE' }); close(); toast(t('The link no longer works')); } catch (e) { toast(e.message); }
+        };
+      } catch (e) { toast(e.message); }
+    };
+  });
+}
+
+async function shareAsText(r) {
   const text = `${r.title}\n\n${r.servings ? `${t('Servings: {s}', { s: r.servings })}\n\n` : ''}${t('Ingredients:')}\n${(r.ingredients || []).map(i => `• ${i}`).join('\n')}\n\n${t('Steps:')}\n${(r.steps || []).map((s, i) => `${i + 1}. ${s}`).join('\n')}${r.sourceUrl ? `\n\n${r.sourceUrl}` : ''}`;
   if (navigator.share) { try { await navigator.share({ title: r.title, text }); } catch {} return; }
   await navigator.clipboard.writeText(text); toast(t('Recipe copied to clipboard'));
@@ -427,6 +461,7 @@ function renderAuth(mode = 'login') {
       user = await (signup ? signUp(body) : logIn(body));
       renderChrome();
       await offerLegacyMove();
+      await savePendingShare();
       route();
       if (pendingSharedUrl) { openUrlSheet(pendingSharedUrl); pendingSharedUrl = null; }
     } catch (ex) { err.textContent = ex.message; err.hidden = false; btn.disabled = false; }
@@ -497,6 +532,19 @@ async function renderVerify(token) {
   } catch (e) {
     authShell(t('Link not valid'), esc(e.message), `<p class="center"><a class="btn" href="#/">${t('Open Recipe Box')}</a></p>`);
   }
+}
+
+// "Save to my Recipe Box" on a shared page while logged out: finish it once logged in
+async function savePendingShare() {
+  if (!user) return; // kept until after log in / sign up
+  let token = null;
+  try { token = localStorage.getItem('rb-pending-share'); localStorage.removeItem('rb-pending-share'); } catch {}
+  if (!token) return;
+  try {
+    const saved = await api(`/api/shared/${encodeURIComponent(token)}/save`, { method: 'POST', body: {} });
+    toast(t('Saved “{title}” to your recipes', { title: saved.title }), 3500);
+    location.hash = `#/recipe/${saved.id}`;
+  } catch (e) { toast(e.message, 4000); }
 }
 
 // Recipes saved on this device before accounts existed: move them into the account
@@ -702,6 +750,7 @@ if (sharedUrl) history.replaceState(null, '', '/#/');
   try { user = await currentUser(); } catch { user = null; }
   try { ({ emailEnabled, aiEnabled } = await api('/api/config')); } catch { /* offline */ }
   renderChrome();
+  await savePendingShare();
   await route();
   if (sharedUrl) { if (user) openUrlSheet(sharedUrl); else pendingSharedUrl = sharedUrl; }
 })();

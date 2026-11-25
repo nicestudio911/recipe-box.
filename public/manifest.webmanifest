@@ -1,15 +1,26 @@
 {
+  "id": "/",
   "name": "Recipe Box",
   "short_name": "Recipes",
-  "description": "Your recipes on phone and web",
+  "description": "Your recipes on phone and web: save them, snap them from a cookbook, import them from any link, plan meals and shop.",
+  "lang": "en",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#fbf7f2",
   "theme_color": "#c2532d",
+  "categories": ["food", "lifestyle"],
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Shopping list", "short_name": "Shopping", "url": "/#/shopping", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Meal plan", "short_name": "Plan", "url": "/#/plan", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ],
   "share_target": {
     "action": "/",

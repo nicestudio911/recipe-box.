@@ -63,3 +63,19 @@ export function download(filename, text, type = 'application/json') {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
+
+// Report errors in the browser to the server, so the owner hears about bugs (a few per page load at most)
+let reported = 0;
+function reportError(message, stack) {
+  if (reported++ >= 3 || !message) return;
+  fetch('/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+    body: JSON.stringify({ message: String(message).slice(0, 300), stack: String(stack || '').slice(0, 2000), page: location.hash.split('/').slice(0, 2).join('/') }) }).catch(() => {});
+}
+if (typeof window !== 'undefined') {
+window.addEventListener('error', e => { if (e.error || e.message) reportError(e.message, e.error?.stack); });
+window.addEventListener('unhandledrejection', e => {
+  const r = e.reason;
+  if (r?.status !== undefined) return; // API errors are already shown to the person
+  reportError(r?.message || String(r), r?.stack);
+});
+}

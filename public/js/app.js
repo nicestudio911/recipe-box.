@@ -1,4 +1,4 @@
-import { allRecipes, getRecipe, saveRecipe, deleteRecipe, importAll, api, currentUser, signUp, logIn, logOut, deleteAccount, legacyRecipes, moveLegacyRecipes } from './db.js';
+import { allRecipes, getRecipe, saveRecipe, saveCached, deleteRecipe, importAll, api, currentUser, signUp, logIn, logOut, deleteAccount, legacyRecipes, moveLegacyRecipes } from './db.js';
 import { parseRecipeText } from './parse-text.js';
 import { t, tn, lang, setLang } from './i18n.js';
 import { $, $$, view, esc, lines, toast, fmtMins, resizeImage, pickFiles, openSheet, download } from './ui.js';
@@ -137,6 +137,7 @@ async function renderRecipe(id) {
         </section>` : ''}
 
         ${r.notes ? `<section><h2>${t('Notes')}</h2><p class="notes">${esc(r.notes)}</p></section>` : ''}
+        ${nutritionHtml(r)}
         ${r.sourceUrl ? `<p class="small muted">${t('Source:')} <a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener">${esc(new URL(r.sourceUrl).hostname)}</a></p>` : ''}
 
         <div class="actions">
@@ -161,10 +162,47 @@ async function renderRecipe(id) {
     $('[data-action=cook]').onclick = () => { cookFactor = factor; location.hash = `#/cook/${r.id}`; };
     $('[data-action=shop]').onclick = () => offerToShopping([{ title: r.title, lines: (r.ingredients || []).map(l => scaleLine(l, factor)) }]);
     $('[data-action=plan]').onclick = () => addToPlan(r);
+    const nb = $('[data-action=nutrition]');
+    if (nb) nb.onclick = async () => {
+      nb.disabled = true; nb.textContent = t('Calculating… (about 15 seconds)');
+      try {
+        Object.assign(r, await api(`/api/recipes/${encodeURIComponent(r.id)}/nutrition`, { method: 'POST', body: {} }));
+        await saveCached(r);
+        draw();
+      } catch (e) { toast(e.message, 4000); nb.disabled = false; nb.textContent = t('Estimate with AI'); }
+    };
     $('[data-action=coll]').onclick = () => editCollections(r, saved => { Object.assign(r, saved); draw(); });
     $$('[data-coll]').forEach(a => (a.onclick = () => { listTag = `c:${a.dataset.coll}`; listQuery = ''; }));
   };
   draw();
+}
+
+// Nutrition per serving (estimated by AI from the ingredients)
+function nutritionHtml(r) {
+  const n = r.nutrition;
+  const hasIng = (r.ingredients || []).some(l => !l.startsWith('## '));
+  if (!n) return aiEnabled && hasIng ? `<section class="nutrition">
+      <h2>${t('Nutrition')}</h2>
+      <p class="muted small">${t('Get an estimate of calories, protein, carbs and fat per serving.')}</p>
+      <button class="btn small" data-action="nutrition">✨ ${t('Estimate with AI')}</button>
+    </section>` : '';
+  const p = n.perServing;
+  const row = (label, v, unit, sub = false) => `<tr class="${sub ? 'sub' : ''}"><td>${label}</td><td>${String(v).replace('.', lang === 'bg' ? ',' : '.')} ${unit}</td></tr>`;
+  return `<section class="nutrition">
+    <h2>${t('Nutrition')} <span class="muted small">${t('per serving')}</span></h2>
+    <div class="kcal"><b>${p.kcal}</b> kcal</div>
+    <table>
+      ${row(t('Protein'), p.protein_g, t('g'))}
+      ${row(t('Carbohydrates'), p.carbs_g, t('g'))}
+      ${row(t('of which sugars'), p.sugar_g, t('g'), true)}
+      ${row(t('Fat'), p.fat_g, t('g'))}
+      ${row(t('of which saturates'), p.saturated_fat_g, t('g'), true)}
+      ${row(t('Fibre'), p.fiber_g, t('g'))}
+      ${row(t('Salt'), p.salt_g, t('g'))}
+    </table>
+    <p class="muted small">${t('AI estimate for {n} servings, accuracy: {c}.', { n: String(n.servings).replace('.', lang === 'bg' ? ',' : '.'), c: t(n.confidence) })} ${esc(n.note)}
+      ${aiEnabled ? `<button class="link" data-action="nutrition">${t('Recalculate')}</button>` : ''}</p>
+  </section>`;
 }
 
 // Put a recipe into your own collections ("Christmas", "Quick dinners"...)
@@ -263,6 +301,7 @@ async function renderEdit(id) {
       ingredients: lines(d.ingredients), steps: lines(d.steps),
       tags: d.tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
       notes: d.notes.trim(), sourceUrl: d.sourceUrl.trim(),
+      nutrition: existing && lines(d.ingredients).join('\n') === (existing.ingredients || []).join('\n') && d.servings.trim() === (existing.servings || '') ? existing.nutrition : null,
       });
     } catch (ex) {
       btn.disabled = false; btn.textContent = t('Save recipe');

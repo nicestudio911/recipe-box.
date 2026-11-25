@@ -202,6 +202,27 @@ const BG = {
   'Download everything we store about you: your account details and all your recipes.': 'Изтеглете всичко, което пазим за вас: данните на профила и всичките ви рецепти.',
   'Download all my data': 'Изтегли всичките ми данни',
 
+  // nutrition
+  'Nutrition': 'Хранителни стойности',
+  'per serving': 'на порция',
+  'Get an estimate of calories, protein, carbs and fat per serving.': 'Вижте приблизително калории, белтъчини, въглехидрати и мазнини на порция.',
+  'Estimate with AI': 'Изчисли с ИИ',
+  'Calculating… (about 15 seconds)': 'Изчисляване… (около 15 секунди)',
+  'Protein': 'Белтъчини',
+  'Carbohydrates': 'Въглехидрати',
+  'of which sugars': 'от които захари',
+  'Fat': 'Мазнини',
+  'of which saturates': 'от които наситени',
+  'Fibre': 'Фибри',
+  'Salt': 'Сол',
+  'g': 'г',
+  'AI estimate for {n} servings, accuracy: {c}.': 'Оценка с ИИ за {n} порции, точност: {c}.',
+  'low': 'ниска',
+  'medium': 'средна',
+  'high': 'висока',
+  'Recalculate': 'Изчисли отново',
+  'Add ingredients first.': 'Първо добавете продукти.',
+
   // units, timers, cooking
   'Units': 'Мерни единици',
   'Original units': 'Оригинални мерки',

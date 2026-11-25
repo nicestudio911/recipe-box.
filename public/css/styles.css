@@ -235,3 +235,13 @@ body.has-tabs #timers { bottom: calc(80px + env(safe-area-inset-bottom)); }
 .cook-nav .btn { flex: 1; min-height: 56px; font-size: 1.1rem; }
 body.cooking #timers { bottom: calc(84px + env(safe-area-inset-bottom)); }
 body.cooking .cook { padding-bottom: 70px; }
+
+/* nutrition */
+.nutrition .kcal { font-size: 1.1rem; margin-bottom: 6px; }
+.nutrition .kcal b { font-size: 1.8rem; color: var(--accent); }
+.nutrition table { width: 100%; max-width: 420px; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+.nutrition td { padding: 7px 14px; border-bottom: 1px solid var(--line); }
+.nutrition td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.nutrition tr:last-child td { border-bottom: 0; }
+.nutrition tr.sub td:first-child { padding-left: 28px; color: var(--muted); font-size: .92rem; }
+.section-head + .ingredients, .section-head + ul { margin-top: 10px; }

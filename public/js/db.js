@@ -106,6 +106,8 @@ export async function saveRecipe(r) {
   return saved;
 }
 
+export const saveCached = r => tx(CACHE, 'readwrite', s => s.put(r));
+
 export async function deleteRecipe(id) {
   await api(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE' });
   await tx(CACHE, 'readwrite', s => s.delete(id));

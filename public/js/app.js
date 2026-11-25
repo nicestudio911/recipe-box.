@@ -277,6 +277,11 @@ function renderSettings() {
       <h2>${t('Install on your phone')}</h2>
       <p class="muted">${t("Open this page in your phone's browser. On iPhone tap Share, then “Add to Home Screen”. On Android tap the menu, then “Install app”. It then opens like a normal app.")}</p>
 
+      <h2>${t('Your data and privacy')}</h2>
+      <p class="muted">${t('Download everything we store about you: your account details and all your recipes.')}</p>
+      <div class="actions"><a class="btn" href="/api/account/export" download>${t('Download all my data')}</a></div>
+      <p class="small legal-links"><a href="/privacy.html">${t('Privacy policy')}</a> · <a href="/terms.html">${t('Terms of use')}</a></p>
+
       <h2>${t('Delete account')}</h2>
       <p class="muted">${t('Permanently deletes your account and all your recipes. Download a backup first if you want to keep them.')}</p>
       <div class="actions"><button class="btn danger" data-act="delete">${t('Delete my account')}</button></div>

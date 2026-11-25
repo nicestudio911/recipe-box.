@@ -198,6 +198,9 @@ const BG = {
 
   'Privacy policy': 'Политика за поверителност',
   'Terms of use': 'Условия за ползване',
+  'Your data and privacy': 'Вашите данни и поверителност',
+  'Download everything we store about you: your account details and all your recipes.': 'Изтеглете всичко, което пазим за вас: данните на профила и всичките ви рецепти.',
+  'Download all my data': 'Изтегли всичките ми данни',
 
   // server / API messages
   'You are offline. Connect to the internet and try again.': 'Няма връзка с интернет. Свържете се и опитайте отново.',

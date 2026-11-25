@@ -70,3 +70,26 @@ test('without an email service the features report off', async () => {
   assert.equal((await fetch(b2 + '/api/forgot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"email":"a@b.co"}' })).status, 503);
   s2.close();
 });
+
+test('export my data returns account and recipes as a download', async () => {
+  const a = client();
+  await a('/api/signup', { method: 'POST', body: { email: 'x@example.com', password: 'password1', name: 'Xena' } });
+  await a('/api/recipes', { method: 'POST', body: { title: 'Баница', ingredients: ['тесто'] } });
+  const res = await fetch(base + '/api/account/export', { headers: { cookie: '' } });
+  assert.equal(res.status, 401, 'needs login');
+  const e = await a('/api/account/export');
+  assert.equal(e.status, 200);
+  assert.equal(e.data.account.email, 'x@example.com');
+  assert.equal(e.data.account.name, 'Xena');
+  assert.ok(e.data.account.createdAt);
+  assert.equal(e.data.account.pass_hash, undefined, 'no password hash');
+  assert.deepEqual(e.data.recipes.map(r => r.title), ['Баница']);
+});
+
+test('legal pages are served', async () => {
+  for (const p of ['/privacy.html', '/terms.html']) {
+    const res = await fetch(base + p);
+    assert.equal(res.status, 200);
+    assert.match(await res.text(), /section lang="bg"/);
+  }
+});
